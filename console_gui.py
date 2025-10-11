@@ -8,6 +8,7 @@ from getpass import getpass
 from time import monotonic
 from typing import Any, Iterable
 
+from constants import WS_TOPICS_LIMIT
 from utils import Game, webopen
 
 
@@ -190,6 +191,7 @@ class ConsoleGUIManager:
         self.tray = ConsoleTray(self)
         self.status = ConsoleStatus()
         self.output = ConsoleOutput()
+        self.websockets = ConsoleWebsocketStatus(self)
         self.channels = ConsoleChannelList(self)
         self.progress = ConsoleProgress()
         self.inv = ConsoleInventory(self)
@@ -263,4 +265,46 @@ class ConsoleGUIManager:
     @property
     def close_requested(self) -> bool:
         return self._close_requested
+
+
+class ConsoleWebsocketStatus:
+    """Console representation of websocket status updates."""
+
+    def __init__(self, manager: ConsoleGUIManager):
+        self._manager = manager
+        self._items: dict[int, dict[str, int | str]] = {}
+
+    def update(
+        self,
+        idx: int,
+        status: str | None = None,
+        topics: int | None = None,
+    ) -> None:
+        if status is None and topics is None:
+            raise TypeError("You need to provide at least one of: status, topics")
+        entry = self._items.get(idx, {"status": "disconnected", "topics": 0})
+        if status is not None:
+            entry["status"] = status
+        if topics is not None:
+            entry["topics"] = topics
+        self._items[idx] = entry
+        self._print_status(idx, entry)
+
+    def remove(self, idx: int) -> None:
+        if idx in self._items:
+            del self._items[idx]
+            print(f"Websocket {idx + 1} removed.")
+
+    def _print_status(self, idx: int, entry: dict[str, int | str]) -> None:
+        status = entry["status"]
+        topics = entry["topics"]
+        print(
+            "Websocket {idx}: {status} ({topics}/{limit})".format(
+                idx=idx + 1,
+                status=status,
+                topics=topics,
+                limit=WS_TOPICS_LIMIT,
+            )
+        )
+
 
