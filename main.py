@@ -6,7 +6,6 @@ from multiprocessing import freeze_support
 
 if __name__ == "__main__":
     freeze_support()
-    import io
     import sys
     import signal
     import asyncio
@@ -14,11 +13,9 @@ if __name__ == "__main__":
     import argparse
     import warnings
     import traceback
-    import tkinter as tk
-    from tkinter import messagebox
-    from typing import NoReturn, TYPE_CHECKING
 
     import truststore
+
     truststore.inject_into_ssl()
 
     from translate import _
@@ -26,34 +23,14 @@ if __name__ == "__main__":
     from settings import Settings
     from version import __version__
     from exceptions import CaptchaRequired
-    from utils import lock_file, resource_path, set_root_icon
+    from utils import lock_file
     from constants import LOGGING_LEVELS, SELF_PATH, FILE_FORMATTER, LOG_PATH, LOCK_PATH
-
-    if TYPE_CHECKING:
-        from _typeshed import SupportsWrite
+    from console_gui import ConsoleGUIManager
 
     warnings.simplefilter("default", ResourceWarning)
 
-    # import tracemalloc
-    # tracemalloc.start(3)
-
     if sys.version_info < (3, 10):
         raise RuntimeError("Python 3.10 or higher is required")
-
-    class Parser(argparse.ArgumentParser):
-        def __init__(self, *args, **kwargs) -> None:
-            super().__init__(*args, **kwargs)
-            self._message: io.StringIO = io.StringIO()
-
-        def _print_message(self, message: str, file: SupportsWrite[str] | None = None) -> None:
-            self._message.write(message)
-            # print(message, file=self._message)
-
-        def exit(self, status: int = 0, message: str | None = None) -> NoReturn:
-            try:
-                super().exit(status, message)  # sys.exit(2)
-            finally:
-                messagebox.showerror("Argument Parser Error", self._message.getvalue())
 
     class ParsedArgs(argparse.Namespace):
         _verbose: int
@@ -89,15 +66,7 @@ if __name__ == "__main__":
                 return logging.INFO
             return logging.NOTSET
 
-    # handle input parameters
-    # NOTE: parser output is shown via message box
-    # we also need a dummy invisible window for the parser
-    root = tk.Tk()
-    root.overrideredirect(True)
-    root.withdraw()
-    set_root_icon(root, resource_path("icons/pickaxe.ico"))
-    root.update()
-    parser = Parser(
+    parser = argparse.ArgumentParser(
         SELF_PATH.name,
         description="A program that allows you to mine timed drops on Twitch.",
     )
@@ -118,15 +87,10 @@ if __name__ == "__main__":
     try:
         settings = Settings(args)
     except Exception:
-        messagebox.showerror(
-            "Settings error",
-            f"There was an error while loading the settings file:\n\n{traceback.format_exc()}"
-        )
+        print("There was an error while loading the settings file:\n", file=sys.stderr)
+        traceback.print_exc()
         sys.exit(4)
-    # dummy window isn't needed anymore
-    root.destroy()
-    # get rid of unneeded objects
-    del root, parser
+    del parser
 
     # client run
     async def main():
@@ -152,7 +116,7 @@ if __name__ == "__main__":
         logging.getLogger("TwitchDrops.websocket").setLevel(settings.debug_ws)
 
         exit_status = 0
-        client = Twitch(settings)
+        client = Twitch(settings, gui_factory=ConsoleGUIManager)
         loop = asyncio.get_running_loop()
         if sys.platform == "linux":
             loop.add_signal_handler(signal.SIGINT, lambda *_: client.gui.close())
