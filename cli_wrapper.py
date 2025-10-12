@@ -9,8 +9,9 @@ import signal
 import sys
 import traceback
 import warnings
+from pathlib import Path
 from multiprocessing import freeze_support
-from typing import Sequence
+from typing import Mapping, Sequence, TypedDict
 
 try:
     import truststore
@@ -18,6 +19,32 @@ except ModuleNotFoundError:  # pragma: no cover - optional dependency
     truststore = None
 
 from version import __version__
+
+
+WRAPPER_SETTINGS_FILENAME = "cli_wrapper_settings.json"
+
+
+class WrapperConfig(TypedDict):
+    verbose: int
+    quiet: bool
+    log: bool
+    dump: bool
+    tray: bool
+    telegram_token: str
+    telegram_chat_id: str
+    telegram_thread_id: int | None
+
+
+DEFAULT_WRAPPER_CONFIG: WrapperConfig = {
+    "verbose": 0,
+    "quiet": False,
+    "log": False,
+    "dump": False,
+    "tray": False,
+    "telegram_token": "",
+    "telegram_chat_id": "",
+    "telegram_thread_id": None,
+}
 
 
 class ParsedArgs(argparse.Namespace):
@@ -105,6 +132,110 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _wrapper_settings_path() -> Path:
+    from constants import WORKING_DIR
+
+    return Path(WORKING_DIR, WRAPPER_SETTINGS_FILENAME)
+
+
+def _coerce_wrapper_config(data: Mapping[str, object]) -> WrapperConfig:
+    config: WrapperConfig = dict(DEFAULT_WRAPPER_CONFIG)
+
+    try:
+        verbose = int(data.get("verbose", config["verbose"]))
+    except (TypeError, ValueError):
+        verbose = config["verbose"]
+    config["verbose"] = max(0, verbose)
+
+    for key in ("quiet", "log", "dump", "tray"):
+        value = data.get(key, config[key])
+        if isinstance(value, bool):
+            config[key] = value
+        elif isinstance(value, str):
+            lowered = value.strip().lower()
+            if lowered in {"1", "true", "yes", "on"}:
+                config[key] = True
+            elif lowered in {"0", "false", "no", "off"}:
+                config[key] = False
+
+    token = data.get("telegram_token", config["telegram_token"])
+    if token is None:
+        config["telegram_token"] = ""
+    else:
+        config["telegram_token"] = str(token).strip()
+
+    chat_id = data.get("telegram_chat_id", config["telegram_chat_id"])
+    if chat_id is None:
+        config["telegram_chat_id"] = ""
+    else:
+        config["telegram_chat_id"] = str(chat_id).strip()
+
+    thread_id = data.get("telegram_thread_id", config["telegram_thread_id"])
+    if thread_id in {"", None}:
+        config["telegram_thread_id"] = None
+    else:
+        try:
+            config["telegram_thread_id"] = int(thread_id)  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            config["telegram_thread_id"] = None
+
+    return config
+
+
+def load_wrapper_config() -> tuple[WrapperConfig, Path, bool]:
+    from utils import json_load, json_save
+
+    path = _wrapper_settings_path()
+    existed = path.exists()
+    raw_config = json_load(path, DEFAULT_WRAPPER_CONFIG)
+    config = _coerce_wrapper_config(raw_config)
+    if not existed:
+        json_save(path, config, sort=True)
+    return config, path, not existed
+
+
+def apply_wrapper_config(args: ParsedArgs, config: WrapperConfig) -> set[str]:
+    applied: set[str] = set()
+
+    if args._verbose == 0 and config["verbose"] > 0:
+        args._verbose = config["verbose"]
+        applied.add("verbose")
+
+    if not args.quiet and config["quiet"]:
+        args.quiet = True
+        applied.add("quiet")
+
+    if not args.log and config["log"]:
+        args.log = True
+        applied.add("log")
+
+    if not args.dump and config["dump"]:
+        args.dump = True
+        applied.add("dump")
+
+    if not args.tray and config["tray"]:
+        args.tray = True
+        applied.add("tray")
+
+    if args.telegram_token is None:
+        token = config["telegram_token"].strip()
+        if token:
+            args.telegram_token = token
+            applied.add("telegram_token")
+
+    if args.telegram_chat_id is None:
+        chat_id = config["telegram_chat_id"].strip()
+        if chat_id:
+            args.telegram_chat_id = chat_id
+            applied.add("telegram_chat_id")
+
+    if args.telegram_thread_id is None and config["telegram_thread_id"] is not None:
+        args.telegram_thread_id = config["telegram_thread_id"]
+        applied.add("telegram_thread_id")
+
+    return applied
+
+
 def patch_headless_gui(args: ParsedArgs) -> None:
     from headless_gui import HeadlessGUI, configure_telegram
     import gui
@@ -136,9 +267,22 @@ async def run_client(args: ParsedArgs) -> int:
     from translate import _
     from constants import FILE_FORMATTER, LOG_PATH, SETTINGS_PATH
 
+    wrapper_config, config_path, created = load_wrapper_config()
+    applied = apply_wrapper_config(args, wrapper_config)
+
     console_level = configure_logging(args)
     bootstrap_logger = logging.getLogger("TwitchDrops.bootstrap")
     bootstrap_logger.setLevel(console_level)
+    if created:
+        bootstrap_logger.info(
+            "Created CLI wrapper settings template at %s", config_path
+        )
+    else:
+        bootstrap_logger.info("Loaded CLI wrapper settings from %s", config_path)
+    if applied:
+        bootstrap_logger.info(
+            "Applied stored wrapper options: %s", ", ".join(sorted(applied))
+        )
     bootstrap_logger.info("Starting Twitch Drops Miner in headless mode")
 
     try:

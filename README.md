@@ -46,6 +46,13 @@ print the current release number and exit. Optional `--telegram-token` and
 `--telegram-chat-id` flags can be provided to forward mined drop notifications
 to a Telegram bot; add `--telegram-thread-id` for Telegram forum topics.
 
+The wrapper now also writes a `cli_wrapper_settings.json` file next to the
+standard `settings.json`. It is created automatically on the first launch and
+can be edited to set default values for common options (for example enabling
+`--log` or pre-configuring the Telegram token and chat ID). Any command-line
+flag you pass still takes precedence over what is stored in the file, so you
+can temporarily override the saved defaults when needed.
+
 ### Pictures:
 
 ![Main](https://user-images.githubusercontent.com/4180725/164298155-c0880ad7-6423-4419-8d73-f3c053730a1b.png)
