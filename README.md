@@ -30,7 +30,9 @@ Every several seconds, the application pretends to watch a particular stream by 
 For server environments or anyone who prefers the terminal, the
 `cli_wrapper.py` script now provides a fully headless entry point. The wrapper
 uses lightweight console substitutes for the Tk-based interface so no display
-server is required. Launch the miner with:
+server is required. It now reports its progress directly in the terminal so you
+can see when the settings are loaded, the Twitch client starts, and when the
+miner shuts down. Launch the miner with:
 
 ```bash
 python cli_wrapper.py --log
@@ -38,8 +40,9 @@ python cli_wrapper.py --log
 
 All familiar options from the GUI application are available (`-v` for verbose
 logging, `--log` to enable file logging, etc.), but any tray-related settings
-are ignored because there is no graphical shell. The command also honours
-`--version` to print the current release number and exit.
+are ignored because there is no graphical shell. Use `--quiet` if you only want
+warnings and errors in the console. The command also honours `--version` to
+print the current release number and exit.
 
 ### Pictures:
 

@@ -27,6 +27,7 @@ class ParsedArgs(argparse.Namespace):
     log: bool
     tray: bool
     dump: bool
+    quiet: bool
 
     @property
     def logging_level(self) -> int:
@@ -67,6 +68,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "-v", dest="_verbose", action="count", default=0, help="Increase console verbosity"
     )
+    parser.add_argument(
+        "-q",
+        "--quiet",
+        action="store_true",
+        help="Only show warnings and errors in the console output",
+    )
     parser.add_argument("--tray", action="store_true", help="(ignored) kept for compatibility")
     parser.add_argument("--log", action="store_true", help="Write log output to twitch.log")
     parser.add_argument("--dump", action="store_true", help="Reset debug dump file on start")
@@ -86,24 +93,32 @@ def patch_headless_gui() -> None:
     gui.GUIManager = HeadlessGUI
 
 
-def configure_logging(args: ParsedArgs) -> None:
-    level = args.logging_level
+def configure_logging(args: ParsedArgs) -> int:
+    console_level = (
+        logging.WARNING if args.quiet else min(args.logging_level, logging.INFO)
+    )
     logging.basicConfig(
-        level=level,
+        level=console_level,
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
         datefmt="%H:%M:%S",
+        force=True,
     )
+    return console_level
 
 
 async def run_client(args: ParsedArgs) -> int:
     from settings import Settings
     from exceptions import CaptchaRequired
     from translate import _
-    from constants import FILE_FORMATTER, LOG_PATH
+    from constants import FILE_FORMATTER, LOG_PATH, SETTINGS_PATH
 
-    configure_logging(args)
+    console_level = configure_logging(args)
+    bootstrap_logger = logging.getLogger("TwitchDrops.bootstrap")
+    bootstrap_logger.setLevel(console_level)
+    bootstrap_logger.info("Starting Twitch Drops Miner in headless mode")
 
     try:
+        bootstrap_logger.info("Loading settings from %s", SETTINGS_PATH)
         settings = Settings(args)
     except Exception:
         print("There was an error while loading the settings file:", file=sys.stderr)
@@ -128,15 +143,21 @@ async def run_client(args: ParsedArgs) -> int:
     if settings.logging_level > logging.DEBUG:
         logging.getLogger().addHandler(logging.NullHandler())
     logger = logging.getLogger("TwitchDrops")
-    logger.setLevel(settings.logging_level)
+    logger.setLevel(console_level)
     if settings.log:
         handler = logging.FileHandler(LOG_PATH)
         handler.setFormatter(FILE_FORMATTER)
+        handler.setLevel(settings.logging_level)
         logger.addHandler(handler)
+        bootstrap_logger.info("Writing persistent logs to %s", LOG_PATH)
+    else:
+        bootstrap_logger.debug("File logging disabled; pass --log to enable it")
     logging.getLogger("TwitchDrops.gql").setLevel(settings.debug_gql)
     logging.getLogger("TwitchDrops.websocket").setLevel(settings.debug_ws)
 
+    bootstrap_logger.info("Initialising Twitch client")
     client = Twitch(settings)
+    bootstrap_logger.info("Twitch client initialised; starting event loop")
 
     loop = asyncio.get_running_loop()
     if sys.platform == "linux":
@@ -145,21 +166,25 @@ async def run_client(args: ParsedArgs) -> int:
 
     exit_status = 0
     try:
+        bootstrap_logger.info("Miner is running; press Ctrl+C to exit")
         await client.run()
     except CaptchaRequired:
         exit_status = 1
         client.prevent_close()
         client.print(_("error", "captcha"))
+        bootstrap_logger.error("Twitch requires captcha verification; complete it and restart the miner")
     except Exception:
         exit_status = 1
         client.prevent_close()
         client.print("Fatal error encountered:\n")
         client.print(traceback.format_exc())
+        bootstrap_logger.exception("Fatal error in Twitch Drops Miner")
     finally:
         if sys.platform == "linux":
             loop.remove_signal_handler(signal.SIGINT)
             loop.remove_signal_handler(signal.SIGTERM)
         client.print(_("gui", "status", "exiting"))
+        bootstrap_logger.info("Stopping miner and cleaning up")
         await client.shutdown()
 
     if not client.gui.close_requested:
@@ -167,11 +192,17 @@ async def run_client(args: ParsedArgs) -> int:
         client.print(_("status", "terminated"))
         client.gui.status.update(_("gui", "status", "terminated"))
         client.gui.grab_attention(sound=True)
+        bootstrap_logger.warning("Miner terminated unexpectedly; attention requested")
 
     await client.gui.wait_until_closed()
     client.save(force=True)
     client.gui.stop()
     client.gui.close_window()
+
+    if exit_status == 0:
+        bootstrap_logger.info("Twitch Drops Miner stopped successfully")
+    else:
+        bootstrap_logger.error("Twitch Drops Miner exited with status %s", exit_status)
 
     return exit_status
 
@@ -187,6 +218,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     success, lock = lock_file(LOCK_PATH)
     if not success:
+        print("Another Twitch Drops Miner instance is already running.", file=sys.stderr)
         return 3
 
     try:
