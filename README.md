@@ -61,6 +61,14 @@ with `/set`, the wrapper reloads the credentials immediately so subsequent drop
 notifications and commands use the fresh token, chat, or forum thread without
 restarting the miner.
 
+If you have never configured a campaign priority list, the wrapper now
+automatically enables a catch-all mining mode. When no preferred campaigns are
+stored in `settings.json`, it switches the miner to process every available
+campaign, ensuring headless deployments keep working after fresh installs
+without manual setup. You can still curate the priority list or change the
+priority mode in the settings file or via the regular application if you prefer
+more control.
+
 ### Pictures:
 
 ![Main](https://user-images.githubusercontent.com/4180725/164298155-c0880ad7-6423-4419-8d73-f3c053730a1b.png)

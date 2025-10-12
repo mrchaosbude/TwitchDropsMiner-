@@ -317,7 +317,7 @@ async def run_client(args: ParsedArgs) -> int:
     from settings import Settings
     from exceptions import CaptchaRequired
     from translate import _
-    from constants import FILE_FORMATTER, LOG_PATH, SETTINGS_PATH
+    from constants import FILE_FORMATTER, LOG_PATH, PriorityMode, SETTINGS_PATH
 
     wrapper_config, config_path, created = load_wrapper_config()
     settings_manager = WrapperSettingsManager(config_path)
@@ -350,6 +350,12 @@ async def run_client(args: ParsedArgs) -> int:
         print("There was an error while loading the settings file:", file=sys.stderr)
         print(traceback.format_exc(), file=sys.stderr)
         return 4
+
+    if not settings.priority and settings.priority_mode is PriorityMode.PRIORITY_ONLY:
+        bootstrap_logger.info(
+            "No priority campaigns configured; enabling automatic campaign selection"
+        )
+        settings.priority_mode = PriorityMode.ENDING_SOONEST
 
     # Ensure the GUI class used by Twitch is replaced before the client is created.
     patch_headless_gui(
