@@ -284,7 +284,8 @@ class WrapperSettingsManager:
 
 def patch_headless_gui(args: ParsedArgs, *, settings_manager: WrapperSettingsManager | None) -> None:
     from headless_gui import HeadlessGUI, configure_telegram
-    import gui
+    import sys
+    from types import ModuleType
 
     configure_telegram(
         token=args.telegram_token,
@@ -292,7 +293,11 @@ def patch_headless_gui(args: ParsedArgs, *, settings_manager: WrapperSettingsMan
         thread_id=args.telegram_thread_id,
         settings_manager=settings_manager if args.telegram_commands else None,
     )
-    gui.GUIManager = HeadlessGUI
+    module = sys.modules.get("gui")
+    if module is None:
+        module = ModuleType("gui")
+        sys.modules["gui"] = module
+    module.GUIManager = HeadlessGUI
 
 
 def configure_logging(args: ParsedArgs) -> int:
