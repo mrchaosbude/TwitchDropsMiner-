@@ -44,14 +44,19 @@ are ignored because there is no graphical shell. Use `--quiet` if you only want
 warnings and errors in the console. The command also honours `--version` to
 print the current release number and exit. Optional `--telegram-token` and
 `--telegram-chat-id` flags can be provided to forward mined drop notifications
-to a Telegram bot; add `--telegram-thread-id` for Telegram forum topics.
+to a Telegram bot; add `--telegram-thread-id` for Telegram forum topics. When
+`--telegram-commands` (or the matching setting in the wrapper configuration
+file) is enabled, the bot also accepts commands like `/settings` and
+`/set log true` so you can review or update wrapper defaults remotely.
 
 The wrapper now also writes a `cli_wrapper_settings.json` file next to the
 standard `settings.json`. It is created automatically on the first launch and
 can be edited to set default values for common options (for example enabling
 `--log` or pre-configuring the Telegram token and chat ID). Any command-line
 flag you pass still takes precedence over what is stored in the file, so you
-can temporarily override the saved defaults when needed.
+can temporarily override the saved defaults when needed. You can also enable
+`telegram_commands` to let the Telegram bot list or change these defaults; send
+`/help` to the bot for the available commands.
 
 ### Pictures:
 

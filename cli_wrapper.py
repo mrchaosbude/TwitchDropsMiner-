@@ -33,6 +33,7 @@ class WrapperConfig(TypedDict):
     telegram_token: str
     telegram_chat_id: str
     telegram_thread_id: int | None
+    telegram_commands: bool
 
 
 DEFAULT_WRAPPER_CONFIG: WrapperConfig = {
@@ -44,6 +45,7 @@ DEFAULT_WRAPPER_CONFIG: WrapperConfig = {
     "telegram_token": "",
     "telegram_chat_id": "",
     "telegram_thread_id": None,
+    "telegram_commands": False,
 }
 
 
@@ -58,6 +60,7 @@ class ParsedArgs(argparse.Namespace):
     telegram_token: str | None
     telegram_chat_id: str | None
     telegram_thread_id: int | None
+    telegram_commands: bool
 
     @property
     def logging_level(self) -> int:
@@ -127,6 +130,13 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Optional Telegram forum topic/thread identifier to target when sending"
             " notifications"
+        ),
+    )
+    parser.add_argument(
+        "--telegram-commands",
+        action="store_true",
+        help=(
+            "Enable Telegram bot commands to inspect and update CLI wrapper settings"
         ),
     )
     return parser
@@ -233,10 +243,46 @@ def apply_wrapper_config(args: ParsedArgs, config: WrapperConfig) -> set[str]:
         args.telegram_thread_id = config["telegram_thread_id"]
         applied.add("telegram_thread_id")
 
+    if not args.telegram_commands and config["telegram_commands"]:
+        args.telegram_commands = True
+        applied.add("telegram_commands")
+
     return applied
 
 
-def patch_headless_gui(args: ParsedArgs) -> None:
+class WrapperSettingsManager:
+    """Expose wrapper configuration operations for Telegram commands."""
+
+    def __init__(self, path: Path):
+        self._path = path
+
+    def _load_raw(self) -> Mapping[str, object]:
+        from utils import json_load
+
+        return json_load(self._path, DEFAULT_WRAPPER_CONFIG)
+
+    def list_options(self) -> WrapperConfig:
+        return _coerce_wrapper_config(self._load_raw())
+
+    def update_option(self, key: str, value: str) -> tuple[bool, str]:
+        from utils import json_save
+
+        if key not in DEFAULT_WRAPPER_CONFIG:
+            return False, f"Unknown option '{key}'"
+
+        raw = dict(self._load_raw())
+        raw[key] = value
+        config = _coerce_wrapper_config(raw)
+        json_save(self._path, config, sort=True)
+        rendered = config[key]
+        if isinstance(rendered, bool):
+            rendered_text = "on" if rendered else "off"
+        else:
+            rendered_text = str(rendered)
+        return True, f"Updated {key} -> {rendered_text}"
+
+
+def patch_headless_gui(args: ParsedArgs, *, settings_manager: WrapperSettingsManager | None) -> None:
     from headless_gui import HeadlessGUI, configure_telegram
     import gui
 
@@ -244,6 +290,7 @@ def patch_headless_gui(args: ParsedArgs) -> None:
         token=args.telegram_token,
         chat_id=args.telegram_chat_id,
         thread_id=args.telegram_thread_id,
+        settings_manager=settings_manager if args.telegram_commands else None,
     )
     gui.GUIManager = HeadlessGUI
 
@@ -268,6 +315,7 @@ async def run_client(args: ParsedArgs) -> int:
     from constants import FILE_FORMATTER, LOG_PATH, SETTINGS_PATH
 
     wrapper_config, config_path, created = load_wrapper_config()
+    settings_manager = WrapperSettingsManager(config_path)
     applied = apply_wrapper_config(args, wrapper_config)
 
     console_level = configure_logging(args)
@@ -285,6 +333,11 @@ async def run_client(args: ParsedArgs) -> int:
         )
     bootstrap_logger.info("Starting Twitch Drops Miner in headless mode")
 
+    if args.telegram_commands:
+        bootstrap_logger.info(
+            "Telegram command interface enabled; send /help to your bot for usage"
+        )
+
     try:
         bootstrap_logger.info("Loading settings from %s", SETTINGS_PATH)
         settings = Settings(args)
@@ -294,7 +347,10 @@ async def run_client(args: ParsedArgs) -> int:
         return 4
 
     # Ensure the GUI class used by Twitch is replaced before the client is created.
-    patch_headless_gui(args)
+    patch_headless_gui(
+        args,
+        settings_manager=settings_manager,
+    )
 
     from twitch import Twitch
 

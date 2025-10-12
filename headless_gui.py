@@ -12,7 +12,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import dataclass
-from typing import Any, Awaitable, Dict, Optional, Set
+from typing import Any, Awaitable, Dict, Mapping, Optional, Protocol, Set
 
 import aiohttp
 from yarl import URL
@@ -37,15 +37,30 @@ class TelegramConfig:
     timeout: float = 10.0
 
 
+class TelegramSettingsManager(Protocol):
+    def list_options(self) -> Mapping[str, Any]:
+        ...
+
+    def update_option(self, key: str, value: str) -> tuple[bool, str]:
+        ...
+
+
 _telegram_config: TelegramConfig | None = None
+_telegram_listener: "_TelegramCommandListener" | None = None
 
 
 def configure_telegram(
-    *, token: str | None, chat_id: str | None, thread_id: int | None
+    *,
+    token: str | None,
+    chat_id: str | None,
+    thread_id: int | None,
+    settings_manager: TelegramSettingsManager | None = None,
 ) -> None:
     """Configure Telegram notifications for headless mode."""
 
-    global _telegram_config
+    global _telegram_config, _telegram_listener
+
+    _stop_telegram_listener()
 
     if token and chat_id:
         _telegram_config = TelegramConfig(
@@ -54,6 +69,8 @@ def configure_telegram(
             thread_id=thread_id,
         )
         logger.info("Telegram notifications enabled for chat %s", _telegram_config.chat_id)
+        if settings_manager is not None:
+            _start_telegram_listener(settings_manager)
     else:
         if (token and not chat_id) or (chat_id and not token):
             logger.warning(
@@ -62,6 +79,45 @@ def configure_telegram(
         if _telegram_config is not None:
             logger.info("Telegram notifications disabled")
         _telegram_config = None
+
+        if settings_manager is not None:
+            logger.warning(
+                "Telegram commands requested but Telegram is not configured; ignoring"
+            )
+
+
+def _start_telegram_listener(settings_manager: TelegramSettingsManager) -> None:
+    global _telegram_listener
+
+    if _telegram_config is None:
+        return
+
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        logger.warning("Telegram commands require an active event loop; disabling")
+        return
+
+    listener = _TelegramCommandListener(_telegram_config, settings_manager)
+    listener.start(loop)
+    _telegram_listener = listener
+
+
+def _stop_telegram_listener() -> None:
+    global _telegram_listener
+
+    listener = _telegram_listener
+    if listener is None:
+        return
+
+    _telegram_listener = None
+
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        asyncio.run(listener.stop())
+    else:
+        loop.create_task(listener.stop())
 
 
 async def _send_telegram_message(title: str, body: str) -> None:
@@ -105,6 +161,145 @@ def _maybe_send_telegram(title: str, body: str) -> None:
         asyncio.run(_send_telegram_message(title, body))
     else:
         loop.create_task(_send_telegram_message(title, body))
+
+
+class _TelegramCommandListener:
+    def __init__(
+        self, config: TelegramConfig, manager: TelegramSettingsManager
+    ) -> None:
+        self._config = config
+        self._manager = manager
+        self._task: asyncio.Task[None] | None = None
+        self._stopped = False
+
+    def start(self, loop: asyncio.AbstractEventLoop) -> None:
+        if self._task is not None:
+            return
+        self._task = loop.create_task(self._run(), name="TelegramCommandListener")
+
+    async def stop(self) -> None:
+        self._stopped = True
+        task = self._task
+        if task is None:
+            return
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+        self._task = None
+
+    async def _run(self) -> None:
+        assert _telegram_config is not None
+        offset: int | None = None
+        url = f"https://api.telegram.org/bot{self._config.token}/getUpdates"
+        session = aiohttp.ClientSession()
+        try:
+            while not self._stopped:
+                params: Dict[str, Any] = {"timeout": 25}
+                if offset is not None:
+                    params["offset"] = offset
+                try:
+                    async with session.get(
+                        url, params=params, timeout=self._config.timeout + 5
+                    ) as response:
+                        if response.status >= 400:
+                            text = await response.text()
+                            logger.error(
+                                "Telegram getUpdates failed with status %s: %s",
+                                response.status,
+                                text,
+                            )
+                            await asyncio.sleep(5)
+                            continue
+                        payload = await response.json()
+                except asyncio.CancelledError:
+                    raise
+                except Exception:
+                    logger.exception("Error while polling Telegram updates")
+                    await asyncio.sleep(5)
+                    continue
+
+                if not isinstance(payload, dict):
+                    logger.error("Unexpected Telegram response: %r", payload)
+                    await asyncio.sleep(5)
+                    continue
+
+                for update in payload.get("result", []):
+                    offset = max(offset or 0, int(update.get("update_id", 0))) + 1
+                    await self._handle_update(update)
+        finally:
+            await session.close()
+
+    async def _handle_update(self, update: Dict[str, Any]) -> None:
+        message = update.get("message") or update.get("channel_post")
+        if not isinstance(message, dict):
+            return
+
+        chat = message.get("chat")
+        if not isinstance(chat, dict):
+            return
+
+        chat_id = str(chat.get("id"))
+        if chat_id != self._config.chat_id:
+            return
+
+        if (
+            self._config.thread_id is not None
+            and message.get("message_thread_id") != self._config.thread_id
+        ):
+            return
+
+        text = message.get("text")
+        if not isinstance(text, str) or not text.strip().startswith("/"):
+            return
+
+        await self._dispatch_command(text.strip())
+
+    async def _dispatch_command(self, text: str) -> None:
+        logger.info("[telegram] received command: %s", text)
+        if text.startswith("/help"):
+            await _send_telegram_message(
+                "CLI wrapper help",
+                (
+                    "Available commands:\n"
+                    "/help - show this message\n"
+                    "/settings - list stored wrapper options\n"
+                    "/set <option> <value> - update a wrapper option"
+                ),
+            )
+            return
+
+        if text.startswith("/settings"):
+            options = self._manager.list_options()
+            body_lines = ["Stored CLI wrapper options:"]
+            for key, value in sorted(options.items()):
+                body_lines.append(f"- {key}: {value}")
+            await _send_telegram_message("CLI wrapper settings", "\n".join(body_lines))
+            return
+
+        if text.startswith("/set"):
+            parts = text.split(maxsplit=2)
+            if len(parts) < 3:
+                await _send_telegram_message(
+                    "CLI wrapper error",
+                    "Usage: /set <option> <value>",
+                )
+                return
+            key, value = parts[1], parts[2]
+            success, message = self._manager.update_option(key, value)
+            title = "CLI wrapper updated" if success else "CLI wrapper error"
+            await _send_telegram_message(title, message)
+            if success and key == "telegram_commands":
+                options = self._manager.list_options()
+                if not bool(options.get("telegram_commands")):
+                    _stop_telegram_listener()
+            return
+
+        await _send_telegram_message(
+            "CLI wrapper error",
+            "Unknown command. Send /help for usage.",
+        )
 
 
 class _BaseComponent:
@@ -329,6 +524,7 @@ class HeadlessGUI:
 
     def stop(self) -> None:
         logger.debug("[gui] stop")
+        _stop_telegram_listener()
 
     def close_window(self) -> None:
         logger.debug("[gui] close window")
