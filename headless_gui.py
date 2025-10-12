@@ -171,6 +171,7 @@ class _TelegramCommandListener:
         self._manager = manager
         self._task: asyncio.Task[None] | None = None
         self._stopped = False
+        self._offset: int | None = None
 
     def start(self, loop: asyncio.AbstractEventLoop) -> None:
         if self._task is not None:
@@ -191,14 +192,19 @@ class _TelegramCommandListener:
 
     async def _run(self) -> None:
         assert _telegram_config is not None
-        offset: int | None = None
-        url = f"https://api.telegram.org/bot{self._config.token}/getUpdates"
         session = aiohttp.ClientSession()
         try:
             while not self._stopped:
+                if not self._config.token:
+                    await asyncio.sleep(5)
+                    continue
+
+                url = (
+                    f"https://api.telegram.org/bot{self._config.token}/getUpdates"
+                )
                 params: Dict[str, Any] = {"timeout": 25}
-                if offset is not None:
-                    params["offset"] = offset
+                if self._offset is not None:
+                    params["offset"] = self._offset
                 try:
                     async with session.get(
                         url, params=params, timeout=self._config.timeout + 5
@@ -226,7 +232,8 @@ class _TelegramCommandListener:
                     continue
 
                 for update in payload.get("result", []):
-                    offset = max(offset or 0, int(update.get("update_id", 0))) + 1
+                    update_id = int(update.get("update_id", 0))
+                    self._offset = max(self._offset or 0, update_id) + 1
                     await self._handle_update(update)
         finally:
             await session.close()
@@ -290,15 +297,54 @@ class _TelegramCommandListener:
             success, message = self._manager.update_option(key, value)
             title = "CLI wrapper updated" if success else "CLI wrapper error"
             await _send_telegram_message(title, message)
-            if success and key == "telegram_commands":
-                options = self._manager.list_options()
-                if not bool(options.get("telegram_commands")):
-                    _stop_telegram_listener()
+            if success:
+                if key == "telegram_commands":
+                    options = self._manager.list_options()
+                    if not bool(options.get("telegram_commands")):
+                        _stop_telegram_listener()
+                elif key in {"telegram_token", "telegram_chat_id", "telegram_thread_id"}:
+                    self._refresh_runtime_config()
             return
 
         await _send_telegram_message(
             "CLI wrapper error",
             "Unknown command. Send /help for usage.",
+        )
+
+    def _refresh_runtime_config(self) -> None:
+        options = self._manager.list_options()
+
+        token = str(options.get("telegram_token", "")).strip()
+        chat_id = str(options.get("telegram_chat_id", "")).strip()
+        thread_raw = options.get("telegram_thread_id")
+        thread_id: int | None
+        if thread_raw in {None, ""}:
+            thread_id = None
+        else:
+            try:
+                thread_id = int(thread_raw)  # type: ignore[arg-type]
+            except (TypeError, ValueError):
+                thread_id = None
+
+        global _telegram_config
+
+        if not token or not chat_id:
+            if _telegram_config is not None:
+                logger.info("Telegram notifications disabled via settings update")
+            _telegram_config = None
+            self._config = TelegramConfig(token="", chat_id="", thread_id=None)
+            self._offset = None
+            _stop_telegram_listener()
+            return
+
+        new_config = TelegramConfig(token=token, chat_id=chat_id, thread_id=thread_id)
+        _telegram_config = new_config
+        self._config = new_config
+        self._offset = None
+        logger.info(
+            "Telegram configuration refreshed (chat=%s thread=%s)",
+            new_config.chat_id,
+            new_config.thread_id if new_config.thread_id is not None else "-",
         )
 
 

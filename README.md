@@ -56,7 +56,10 @@ can be edited to set default values for common options (for example enabling
 flag you pass still takes precedence over what is stored in the file, so you
 can temporarily override the saved defaults when needed. You can also enable
 `telegram_commands` to let the Telegram bot list or change these defaults; send
-`/help` to the bot for the available commands.
+`/help` to the bot for the available commands. When you change Telegram values
+with `/set`, the wrapper reloads the credentials immediately so subsequent drop
+notifications and commands use the fresh token, chat, or forum thread without
+restarting the miner.
 
 ### Pictures:
 
