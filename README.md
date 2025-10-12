@@ -25,6 +25,23 @@ Every several seconds, the application pretends to watch a particular stream by 
 - If you wish to keep the miner occupied with mining anything it can, beyond what you've selected via the Priority List, you can use the Priority Mode setting to specify the mining order for the rest of the games.
 - Make sure to link your Twitch account to game accounts on the [campaigns page](https://www.twitch.tv/drops/campaigns), to enable more games to be mined.
 
+### Command-line wrapper
+
+For users who prefer working from a terminal, a thin wrapper script named
+`cli_wrapper.py` is available in the project root. It forwards commands to the
+original `main.py` script without modifying the upstream source, making it safe
+to keep using even after updating the repository. Launch the application via
+
+```bash
+python cli_wrapper.py run -- --log --tray
+```
+
+Everything following the `--` separator is passed directly to `main.py`.  The
+wrapper also exposes two helper commands:
+
+- `python cli_wrapper.py version` – print the current Twitch Drops Miner version.
+- `python cli_wrapper.py path` – display the location of the wrapped `main.py`.
+
 ### Pictures:
 
 ![Main](https://user-images.githubusercontent.com/4180725/164298155-c0880ad7-6423-4419-8d73-f3c053730a1b.png)
