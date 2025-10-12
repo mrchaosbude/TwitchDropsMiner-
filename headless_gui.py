@@ -426,15 +426,36 @@ class HeadlessProgress(_BaseComponent):
         return True
 
     def display(self, drop: Any | None, *, countdown: bool = True, subone: bool = False) -> None:
+        previous = self._current_drop
         self._current_drop = drop
         if drop is None:
-            logger.info("[progress] cleared current drop")
-        else:
-            try:
-                rewards = drop.rewards_text()
-            except AttributeError:
-                rewards = str(drop)
-            logger.info("[progress] %s", rewards)
+            if previous is not None:
+                logger.info("[progress] cleared current drop")
+                logger.info(
+                    "[progress] no active drop – waiting for the next eligible campaign"
+                )
+            return
+
+        try:
+            rewards = drop.rewards_text()
+        except AttributeError:
+            rewards = str(drop)
+
+        details: list[str] = []
+        progress = getattr(drop, "progress", None)
+        if isinstance(progress, (int, float)):
+            details.append(f"{progress * 100:.1f}%")
+
+        campaign = getattr(drop, "campaign", None)
+        claimed = getattr(campaign, "claimed_drops", None) if campaign else None
+        total = getattr(campaign, "total_drops", None) if campaign else None
+        if isinstance(claimed, int) and isinstance(total, int) and total:
+            details.append(f"{claimed}/{total}")
+
+        if details:
+            rewards = f"{rewards} ({', '.join(details)})"
+
+        logger.info("[progress] %s", rewards)
 
 
 class HeadlessChannelList(_BaseComponent):
