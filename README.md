@@ -42,7 +42,9 @@ All familiar options from the GUI application are available (`-v` for verbose
 logging, `--log` to enable file logging, etc.), but any tray-related settings
 are ignored because there is no graphical shell. Use `--quiet` if you only want
 warnings and errors in the console. The command also honours `--version` to
-print the current release number and exit.
+print the current release number and exit. Optional `--telegram-token` and
+`--telegram-chat-id` flags can be provided to forward mined drop notifications
+to a Telegram bot; add `--telegram-thread-id` for Telegram forum topics.
 
 ### Pictures:
 

@@ -14,6 +14,7 @@ import logging
 from dataclasses import dataclass
 from typing import Any, Awaitable, Dict, Optional, Set
 
+import aiohttp
 from yarl import URL
 
 logger = logging.getLogger("TwitchDrops")
@@ -26,6 +27,84 @@ class LoginData:
     username: str
     password: str
     token: str
+
+
+@dataclass
+class TelegramConfig:
+    token: str
+    chat_id: str
+    thread_id: int | None = None
+    timeout: float = 10.0
+
+
+_telegram_config: TelegramConfig | None = None
+
+
+def configure_telegram(
+    *, token: str | None, chat_id: str | None, thread_id: int | None
+) -> None:
+    """Configure Telegram notifications for headless mode."""
+
+    global _telegram_config
+
+    if token and chat_id:
+        _telegram_config = TelegramConfig(
+            token=token.strip(),
+            chat_id=chat_id.strip(),
+            thread_id=thread_id,
+        )
+        logger.info("Telegram notifications enabled for chat %s", _telegram_config.chat_id)
+    else:
+        if (token and not chat_id) or (chat_id and not token):
+            logger.warning(
+                "Incomplete Telegram configuration provided; notifications will be disabled"
+            )
+        if _telegram_config is not None:
+            logger.info("Telegram notifications disabled")
+        _telegram_config = None
+
+
+async def _send_telegram_message(title: str, body: str) -> None:
+    if _telegram_config is None:
+        return
+
+    payload: Dict[str, Any] = {
+        "chat_id": _telegram_config.chat_id,
+        "text": f"{title}\n\n{body}",
+        "disable_notification": False,
+    }
+    if _telegram_config.thread_id is not None:
+        payload["message_thread_id"] = _telegram_config.thread_id
+
+    url = f"https://api.telegram.org/bot{_telegram_config.token}/sendMessage"
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                url, json=payload, timeout=_telegram_config.timeout
+            ) as response:
+                if response.status >= 400:
+                    text = await response.text()
+                    logger.error(
+                        "Telegram notification failed with status %s: %s",
+                        response.status,
+                        text,
+                    )
+                else:
+                    logger.info("Telegram notification sent")
+    except Exception:
+        logger.exception("Failed to send Telegram notification")
+
+
+def _maybe_send_telegram(title: str, body: str) -> None:
+    if _telegram_config is None:
+        return
+
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        asyncio.run(_send_telegram_message(title, body))
+    else:
+        loop.create_task(_send_telegram_message(title, body))
 
 
 class _BaseComponent:
@@ -50,6 +129,7 @@ class HeadlessTray(_BaseComponent):
 
     def notify(self, body: str, title: str) -> None:
         logger.info("[tray] %s: %s", title, body.replace("\n", " "))
+        _maybe_send_telegram(title, body)
 
     def update_title(self, drop: Any | None) -> None:
         if drop is None:

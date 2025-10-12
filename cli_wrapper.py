@@ -28,6 +28,9 @@ class ParsedArgs(argparse.Namespace):
     tray: bool
     dump: bool
     quiet: bool
+    telegram_token: str | None
+    telegram_chat_id: str | None
+    telegram_thread_id: int | None
 
     @property
     def logging_level(self) -> int:
@@ -83,13 +86,34 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--debug-gql", dest="_debug_gql", action="store_true", help=argparse.SUPPRESS
     )
+    parser.add_argument(
+        "--telegram-token",
+        help="Telegram bot token used to send notifications when a drop is mined",
+    )
+    parser.add_argument(
+        "--telegram-chat-id",
+        help="Telegram chat ID that should receive mined drop notifications",
+    )
+    parser.add_argument(
+        "--telegram-thread-id",
+        type=int,
+        help=(
+            "Optional Telegram forum topic/thread identifier to target when sending"
+            " notifications"
+        ),
+    )
     return parser
 
 
-def patch_headless_gui() -> None:
-    from headless_gui import HeadlessGUI
+def patch_headless_gui(args: ParsedArgs) -> None:
+    from headless_gui import HeadlessGUI, configure_telegram
     import gui
 
+    configure_telegram(
+        token=args.telegram_token,
+        chat_id=args.telegram_chat_id,
+        thread_id=args.telegram_thread_id,
+    )
     gui.GUIManager = HeadlessGUI
 
 
@@ -126,7 +150,7 @@ async def run_client(args: ParsedArgs) -> int:
         return 4
 
     # Ensure the GUI class used by Twitch is replaced before the client is created.
-    patch_headless_gui()
+    patch_headless_gui(args)
 
     from twitch import Twitch
 
