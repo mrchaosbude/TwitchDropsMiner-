@@ -27,20 +27,19 @@ Every several seconds, the application pretends to watch a particular stream by 
 
 ### Command-line wrapper
 
-For users who prefer working from a terminal, a thin wrapper script named
-`cli_wrapper.py` is available in the project root. It forwards commands to the
-original `main.py` script without modifying the upstream source, making it safe
-to keep using even after updating the repository. Launch the application via
+For server environments or anyone who prefers the terminal, the
+`cli_wrapper.py` script now provides a fully headless entry point. The wrapper
+uses lightweight console substitutes for the Tk-based interface so no display
+server is required. Launch the miner with:
 
 ```bash
-python cli_wrapper.py run -- --log --tray
+python cli_wrapper.py --log
 ```
 
-Everything following the `--` separator is passed directly to `main.py`.  The
-wrapper also exposes two helper commands:
-
-- `python cli_wrapper.py version` – print the current Twitch Drops Miner version.
-- `python cli_wrapper.py path` – display the location of the wrapped `main.py`.
+All familiar options from the GUI application are available (`-v` for verbose
+logging, `--log` to enable file logging, etc.), but any tray-related settings
+are ignored because there is no graphical shell. The command also honours
+`--version` to print the current release number and exit.
 
 ### Pictures:
 
