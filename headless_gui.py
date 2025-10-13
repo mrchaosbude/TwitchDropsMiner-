@@ -472,13 +472,22 @@ class HeadlessChannelList(_BaseComponent):
     def __init__(self, manager: "HeadlessGUI") -> None:
         super().__init__(manager)
         self._selection: Any | None = None
+        self._channels: list[Any] = []
 
     def display(self, channel: Any, *, add: bool = False) -> None:
         logger.info("[channel] %s", getattr(channel, "name", channel))
+        if add and channel not in self._channels:
+            self._channels.append(channel)
+        elif not add:
+            # Updates for existing channels should keep the ordering but ensure
+            # the channel is tracked even if it was not previously seen.
+            if channel not in self._channels:
+                self._channels.append(channel)
         self._selection = channel
 
     def clear(self) -> None:
         self._selection = None
+        self._channels.clear()
         logger.debug("[channel] cleared list")
 
     def get_selection(self) -> Any | None:
@@ -493,6 +502,16 @@ class HeadlessChannelList(_BaseComponent):
 
     def clear_selection(self) -> None:
         self._selection = None
+
+    def remove(self, channel: Any) -> None:
+        try:
+            self._channels.remove(channel)
+        except ValueError:
+            logger.debug("[channel] attempted to remove unknown channel %s", channel)
+            return
+        if self._selection is channel:
+            self._selection = None
+        logger.info("[channel] removed %s", getattr(channel, "name", channel))
 
 
 class HeadlessInventory(_BaseComponent):
