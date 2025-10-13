@@ -47,6 +47,7 @@ class TelegramSettingsManager(Protocol):
 
 _telegram_config: TelegramConfig | None = None
 _telegram_listener: "_TelegramCommandListener" | None = None
+_telegram_stop_waiter: asyncio.Task[None] | None = None
 
 
 def configure_telegram(
@@ -58,7 +59,7 @@ def configure_telegram(
 ) -> None:
     """Configure Telegram notifications for headless mode."""
 
-    global _telegram_config, _telegram_listener
+    global _telegram_config, _telegram_listener, _telegram_stop_waiter
 
     _stop_telegram_listener()
 
@@ -87,7 +88,7 @@ def configure_telegram(
 
 
 def _start_telegram_listener(settings_manager: TelegramSettingsManager) -> None:
-    global _telegram_listener
+    global _telegram_listener, _telegram_stop_waiter
 
     if _telegram_config is None:
         return
@@ -101,13 +102,21 @@ def _start_telegram_listener(settings_manager: TelegramSettingsManager) -> None:
     listener = _TelegramCommandListener(_telegram_config, settings_manager)
     listener.start(loop)
     _telegram_listener = listener
+    _telegram_stop_waiter = None
 
 
 def _stop_telegram_listener() -> None:
-    global _telegram_listener
+    global _telegram_listener, _telegram_stop_waiter
 
     listener = _telegram_listener
     if listener is None:
+        task = _telegram_stop_waiter
+        if task is not None and task.done():
+            try:
+                task.result()
+            except Exception:
+                logger.exception("Error while stopping Telegram listener")
+            _telegram_stop_waiter = None
         return
 
     _telegram_listener = None
@@ -116,8 +125,9 @@ def _stop_telegram_listener() -> None:
         loop = asyncio.get_running_loop()
     except RuntimeError:
         asyncio.run(listener.stop())
+        _telegram_stop_waiter = None
     else:
-        loop.create_task(listener.stop())
+        _telegram_stop_waiter = loop.create_task(listener.stop())
 
 
 async def _send_telegram_message(title: str, body: str) -> None:
@@ -572,7 +582,19 @@ class HeadlessGUI:
         return self._close_requested
 
     async def wait_until_closed(self) -> None:
-        # Nothing to wait for in headless mode.
+        global _telegram_stop_waiter
+
+        task = _telegram_stop_waiter
+        if task is None:
+            return None
+
+        _telegram_stop_waiter = None
+        try:
+            await asyncio.shield(task)
+        except asyncio.CancelledError:
+            pass
+        except Exception:
+            logger.exception("Error while stopping Telegram listener")
         return None
 
     async def coro_unless_closed(self, coro: Awaitable[Any]) -> Any:
