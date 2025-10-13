@@ -69,6 +69,13 @@ without manual setup. You can still curate the priority list or change the
 priority mode in the settings file or via the regular application if you prefer
 more control.
 
+When the upstream client stops on its own without a shutdown request (for
+example after a mined drop triggers an unexpected exit), the wrapper keeps the
+session alive by restarting the miner automatically after a short delay. If a
+fatal condition such as a captcha requirement occurs, it still surfaces the
+error and exits so you can intervene, but normal mining continues unattended
+when Twitch finishes a campaign or cycles the active drop list.
+
 ### Pictures:
 
 ![Main](https://user-images.githubusercontent.com/4180725/164298155-c0880ad7-6423-4419-8d73-f3c053730a1b.png)

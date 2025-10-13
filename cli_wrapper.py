@@ -22,6 +22,7 @@ from version import __version__
 
 
 WRAPPER_SETTINGS_FILENAME = "cli_wrapper_settings.json"
+UNEXPECTED_RESTART_DELAY = 30
 
 
 class WrapperConfig(TypedDict):
@@ -343,103 +344,133 @@ async def run_client(args: ParsedArgs) -> int:
             "Telegram command interface enabled; send /help to your bot for usage"
         )
 
-    try:
-        bootstrap_logger.info("Loading settings from %s", SETTINGS_PATH)
-        settings = Settings(args)
-    except Exception:
-        print("There was an error while loading the settings file:", file=sys.stderr)
-        print(traceback.format_exc(), file=sys.stderr)
-        return 4
+    while True:
+        try:
+            bootstrap_logger.info("Loading settings from %s", SETTINGS_PATH)
+            settings = Settings(args)
+        except Exception:
+            print("There was an error while loading the settings file:", file=sys.stderr)
+            print(traceback.format_exc(), file=sys.stderr)
+            return 4
 
-    if not settings.priority and settings.priority_mode is PriorityMode.PRIORITY_ONLY:
-        bootstrap_logger.info(
-            "No priority campaigns configured; enabling automatic campaign selection"
+        if not settings.priority and settings.priority_mode is PriorityMode.PRIORITY_ONLY:
+            bootstrap_logger.info(
+                "No priority campaigns configured; enabling automatic campaign selection"
+            )
+            settings.priority_mode = PriorityMode.ENDING_SOONEST
+
+        # Ensure the GUI class used by Twitch is replaced before the client is created.
+        patch_headless_gui(
+            args,
+            settings_manager=settings_manager,
         )
-        settings.priority_mode = PriorityMode.ENDING_SOONEST
 
-    # Ensure the GUI class used by Twitch is replaced before the client is created.
-    patch_headless_gui(
-        args,
-        settings_manager=settings_manager,
-    )
+        from twitch import Twitch
 
-    from twitch import Twitch
+        if truststore is not None:
+            truststore.inject_into_ssl()
+        else:
+            logging.warning(
+                "truststore package is missing; using system certificate store"
+            )
 
-    if truststore is not None:
-        truststore.inject_into_ssl()
-    else:
-        logging.warning("truststore package is missing; using system certificate store")
+        if settings.tray:
+            logging.warning(
+                "Tray mode is not supported in headless operation; ignoring --tray"
+            )
+            settings.tray = False
 
-    if settings.tray:
-        logging.warning("Tray mode is not supported in headless operation; ignoring --tray")
-        settings.tray = False
+        # Configure logging according to settings.
+        if settings.logging_level > logging.DEBUG:
+            logging.getLogger().addHandler(logging.NullHandler())
+        logger = logging.getLogger("TwitchDrops")
+        logger.setLevel(console_level)
+        if settings.log:
+            handler = logging.FileHandler(LOG_PATH)
+            handler.setFormatter(FILE_FORMATTER)
+            handler.setLevel(settings.logging_level)
+            logger.addHandler(handler)
+            bootstrap_logger.info("Writing persistent logs to %s", LOG_PATH)
+        else:
+            bootstrap_logger.debug(
+                "File logging disabled; pass --log to enable it"
+            )
+        logging.getLogger("TwitchDrops.gql").setLevel(settings.debug_gql)
+        logging.getLogger("TwitchDrops.websocket").setLevel(settings.debug_ws)
 
-    # Configure logging according to settings.
-    if settings.logging_level > logging.DEBUG:
-        logging.getLogger().addHandler(logging.NullHandler())
-    logger = logging.getLogger("TwitchDrops")
-    logger.setLevel(console_level)
-    if settings.log:
-        handler = logging.FileHandler(LOG_PATH)
-        handler.setFormatter(FILE_FORMATTER)
-        handler.setLevel(settings.logging_level)
-        logger.addHandler(handler)
-        bootstrap_logger.info("Writing persistent logs to %s", LOG_PATH)
-    else:
-        bootstrap_logger.debug("File logging disabled; pass --log to enable it")
-    logging.getLogger("TwitchDrops.gql").setLevel(settings.debug_gql)
-    logging.getLogger("TwitchDrops.websocket").setLevel(settings.debug_ws)
+        bootstrap_logger.info("Initialising Twitch client")
+        client = Twitch(settings)
+        bootstrap_logger.info("Twitch client initialised; starting event loop")
 
-    bootstrap_logger.info("Initialising Twitch client")
-    client = Twitch(settings)
-    bootstrap_logger.info("Twitch client initialised; starting event loop")
-
-    loop = asyncio.get_running_loop()
-    if sys.platform == "linux":
-        loop.add_signal_handler(signal.SIGINT, lambda *_: client.gui.close())
-        loop.add_signal_handler(signal.SIGTERM, lambda *_: client.gui.close())
-
-    exit_status = 0
-    try:
-        bootstrap_logger.info("Miner is running; press Ctrl+C to exit")
-        await client.run()
-    except CaptchaRequired:
-        exit_status = 1
-        client.prevent_close()
-        client.print(_("error", "captcha"))
-        bootstrap_logger.error("Twitch requires captcha verification; complete it and restart the miner")
-    except Exception:
-        exit_status = 1
-        client.prevent_close()
-        client.print("Fatal error encountered:\n")
-        client.print(traceback.format_exc())
-        bootstrap_logger.exception("Fatal error in Twitch Drops Miner")
-    finally:
+        loop = asyncio.get_running_loop()
         if sys.platform == "linux":
-            loop.remove_signal_handler(signal.SIGINT)
-            loop.remove_signal_handler(signal.SIGTERM)
-        client.print(_("gui", "status", "exiting"))
-        bootstrap_logger.info("Stopping miner and cleaning up")
-        await client.shutdown()
+            loop.add_signal_handler(signal.SIGINT, lambda *_: client.gui.close())
+            loop.add_signal_handler(signal.SIGTERM, lambda *_: client.gui.close())
 
-    if not client.gui.close_requested:
-        client.gui.tray.change_icon("error")
-        client.print(_("status", "terminated"))
-        client.gui.status.update(_("gui", "status", "terminated"))
-        client.gui.grab_attention(sound=True)
-        bootstrap_logger.warning("Miner terminated unexpectedly; attention requested")
+        exit_status = 0
+        try:
+            bootstrap_logger.info("Miner is running; press Ctrl+C to exit")
+            await client.run()
+        except CaptchaRequired:
+            exit_status = 1
+            client.prevent_close()
+            client.print(_("error", "captcha"))
+            bootstrap_logger.error(
+                "Twitch requires captcha verification; complete it and restart the miner"
+            )
+        except Exception:
+            exit_status = 1
+            client.prevent_close()
+            client.print("Fatal error encountered:\n")
+            client.print(traceback.format_exc())
+            bootstrap_logger.exception("Fatal error in Twitch Drops Miner")
+        finally:
+            if sys.platform == "linux":
+                loop.remove_signal_handler(signal.SIGINT)
+                loop.remove_signal_handler(signal.SIGTERM)
+            client.print(_("gui", "status", "exiting"))
+            bootstrap_logger.info("Stopping miner and cleaning up")
+            await client.shutdown()
 
-    await client.gui.wait_until_closed()
-    client.save(force=True)
-    client.gui.stop()
-    client.gui.close_window()
+        unexpected_stop = not client.gui.close_requested
+        auto_restart = unexpected_stop and exit_status == 0
 
-    if exit_status == 0:
-        bootstrap_logger.info("Twitch Drops Miner stopped successfully")
-    else:
-        bootstrap_logger.error("Twitch Drops Miner exited with status %s", exit_status)
+        if unexpected_stop and not auto_restart:
+            client.gui.tray.change_icon("error")
+            client.print(_("status", "terminated"))
+            client.gui.status.update(_("gui", "status", "terminated"))
+            client.gui.grab_attention(sound=True)
+            bootstrap_logger.warning(
+                "Miner terminated unexpectedly; attention requested"
+            )
 
-    return exit_status
+        if auto_restart:
+            client.print("Miner stopped unexpectedly; restarting automatically.")
+            bootstrap_logger.warning(
+                "Miner stopped without a shutdown request; restarting"
+            )
+
+        await client.gui.wait_until_closed()
+        client.save(force=True)
+        client.gui.stop()
+        client.gui.close_window()
+
+        if exit_status == 0:
+            bootstrap_logger.info("Twitch Drops Miner stopped successfully")
+        else:
+            bootstrap_logger.error(
+                "Twitch Drops Miner exited with status %s", exit_status
+            )
+
+        if auto_restart:
+            bootstrap_logger.info(
+                "Restarting miner automatically in %s seconds",
+                UNEXPECTED_RESTART_DELAY,
+            )
+            await asyncio.sleep(UNEXPECTED_RESTART_DELAY)
+            continue
+
+        return exit_status
 
 
 def main(argv: Sequence[str] | None = None) -> int:
