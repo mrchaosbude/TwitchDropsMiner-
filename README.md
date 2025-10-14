@@ -71,10 +71,12 @@ more control.
 
 When the upstream client stops on its own without a shutdown request (for
 example after a mined drop triggers an unexpected exit), the wrapper keeps the
-session alive by restarting the miner automatically after a short delay. If a
-fatal condition such as a captcha requirement occurs, it still surfaces the
-error and exits so you can intervene, but normal mining continues unattended
-when Twitch finishes a campaign or cycles the active drop list.
+session alive by restarting the miner automatically after a short delay. It also
+retries automatically when Twitch returns a transient GraphQL service error so a
+momentary API outage no longer stops the miner for good. If a fatal condition
+such as a captcha requirement occurs, it still surfaces the error and exits so
+you can intervene, but normal mining continues unattended when Twitch finishes a
+campaign or cycles the active drop list.
 
 ### Pictures:
 

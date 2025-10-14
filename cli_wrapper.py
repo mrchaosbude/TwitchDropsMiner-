@@ -316,7 +316,7 @@ def configure_logging(args: ParsedArgs) -> int:
 
 async def run_client(args: ParsedArgs) -> int:
     from settings import Settings
-    from exceptions import CaptchaRequired
+    from exceptions import CaptchaRequired, GQLException
     from translate import _
     from constants import FILE_FORMATTER, LOG_PATH, PriorityMode, SETTINGS_PATH
 
@@ -408,6 +408,7 @@ async def run_client(args: ParsedArgs) -> int:
             loop.add_signal_handler(signal.SIGTERM, lambda *_: client.gui.close())
 
         exit_status = 0
+        transient_restart_reason: str | None = None
         try:
             bootstrap_logger.info("Miner is running; press Ctrl+C to exit")
             await client.run()
@@ -417,6 +418,17 @@ async def run_client(args: ParsedArgs) -> int:
             client.print(_("error", "captcha"))
             bootstrap_logger.error(
                 "Twitch requires captcha verification; complete it and restart the miner"
+            )
+        except GQLException as exc:
+            exit_status = 1
+            transient_restart_reason = "Twitch service error"
+            client.prevent_close()
+            client.print("Twitch reported a temporary service error. The miner will retry shortly.\n")
+            client.print(str(exc))
+            client.gui.status.update("Service error – retrying shortly")
+            bootstrap_logger.error(
+                "GraphQL service error encountered; scheduling automatic restart",
+                exc_info=exc,
             )
         except Exception:
             exit_status = 1
@@ -433,7 +445,9 @@ async def run_client(args: ParsedArgs) -> int:
             await client.shutdown()
 
         unexpected_stop = not client.gui.close_requested
-        auto_restart = unexpected_stop and exit_status == 0
+        auto_restart = unexpected_stop and (
+            exit_status == 0 or transient_restart_reason is not None
+        )
 
         if unexpected_stop and not auto_restart:
             client.gui.tray.change_icon("error")
@@ -445,10 +459,18 @@ async def run_client(args: ParsedArgs) -> int:
             )
 
         if auto_restart:
-            client.print("Miner stopped unexpectedly; restarting automatically.")
-            bootstrap_logger.warning(
-                "Miner stopped without a shutdown request; restarting"
-            )
+            if transient_restart_reason is None:
+                client.print("Miner stopped unexpectedly; restarting automatically.")
+                bootstrap_logger.warning(
+                    "Miner stopped without a shutdown request; restarting"
+                )
+            else:
+                client.print(
+                    "Miner encountered a temporary Twitch error and will restart automatically."
+                )
+                bootstrap_logger.warning(
+                    "Miner stopped because of a transient Twitch service error; restarting"
+                )
 
         await client.gui.wait_until_closed()
         client.save(force=True)
@@ -457,6 +479,11 @@ async def run_client(args: ParsedArgs) -> int:
 
         if exit_status == 0:
             bootstrap_logger.info("Twitch Drops Miner stopped successfully")
+        elif transient_restart_reason is not None:
+            bootstrap_logger.warning(
+                "Twitch Drops Miner stopped because of a transient error: %s",
+                transient_restart_reason,
+            )
         else:
             bootstrap_logger.error(
                 "Twitch Drops Miner exited with status %s", exit_status
