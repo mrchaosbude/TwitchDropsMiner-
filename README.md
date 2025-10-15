@@ -61,6 +61,13 @@ with `/set`, the wrapper reloads the credentials immediately so subsequent drop
 notifications and commands use the fresh token, chat, or forum thread without
 restarting the miner.
 
+Channel selection updates are now hidden from the console by default to keep
+the log focused on mining progress. Set `channel_logs` to `true` in
+`cli_wrapper_settings.json` or launch the wrapper with `--channel-logs` if you
+want to see the active channel list and switching events again. Use
+`--no-channel-logs` or set the option to `false` to silence these messages for
+quieter terminal sessions.
+
 If you have never configured a campaign priority list, the wrapper now
 automatically enables a catch-all mining mode. When no preferred campaigns are
 stored in `settings.json`, it switches the miner to process every available

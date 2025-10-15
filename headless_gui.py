@@ -48,6 +48,7 @@ class TelegramSettingsManager(Protocol):
 _telegram_config: TelegramConfig | None = None
 _telegram_listener: "_TelegramCommandListener" | None = None
 _telegram_stop_waiter: asyncio.Task[None] | None = None
+_channel_logging_enabled: bool = False
 
 
 def configure_telegram(
@@ -85,6 +86,18 @@ def configure_telegram(
             logger.warning(
                 "Telegram commands requested but Telegram is not configured; ignoring"
             )
+
+
+def configure_channel_logging(enabled: bool) -> None:
+    """Toggle channel-related console output."""
+
+    global _channel_logging_enabled
+
+    _channel_logging_enabled = bool(enabled)
+    if _channel_logging_enabled:
+        logger.info("Channel logging enabled")
+    else:
+        logger.debug("Channel logging disabled")
 
 
 def _start_telegram_listener(settings_manager: TelegramSettingsManager) -> None:
@@ -475,7 +488,8 @@ class HeadlessChannelList(_BaseComponent):
         self._channels: list[Any] = []
 
     def display(self, channel: Any, *, add: bool = False) -> None:
-        logger.info("[channel] %s", getattr(channel, "name", channel))
+        if _channel_logging_enabled:
+            logger.info("[channel] %s", getattr(channel, "name", channel))
         if add and channel not in self._channels:
             self._channels.append(channel)
         elif not add:
@@ -495,7 +509,8 @@ class HeadlessChannelList(_BaseComponent):
 
     def set_watching(self, channel: Any) -> None:
         self._selection = channel
-        logger.info("[channel] now watching %s", getattr(channel, "name", channel))
+        if _channel_logging_enabled:
+            logger.info("[channel] now watching %s", getattr(channel, "name", channel))
 
     def clear_watching(self) -> None:
         logger.debug("[channel] cleared watching state")
@@ -511,7 +526,8 @@ class HeadlessChannelList(_BaseComponent):
             return
         if self._selection is channel:
             self._selection = None
-        logger.info("[channel] removed %s", getattr(channel, "name", channel))
+        if _channel_logging_enabled:
+            logger.info("[channel] removed %s", getattr(channel, "name", channel))
 
 
 class HeadlessInventory(_BaseComponent):

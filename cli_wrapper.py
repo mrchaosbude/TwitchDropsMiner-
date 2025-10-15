@@ -31,6 +31,7 @@ class WrapperConfig(TypedDict):
     log: bool
     dump: bool
     tray: bool
+    channel_logs: bool
     telegram_token: str
     telegram_chat_id: str
     telegram_thread_id: int | None
@@ -43,6 +44,7 @@ DEFAULT_WRAPPER_CONFIG: WrapperConfig = {
     "log": False,
     "dump": False,
     "tray": False,
+    "channel_logs": False,
     "telegram_token": "",
     "telegram_chat_id": "",
     "telegram_thread_id": None,
@@ -58,6 +60,7 @@ class ParsedArgs(argparse.Namespace):
     tray: bool
     dump: bool
     quiet: bool
+    channel_logs: bool | None
     telegram_token: str | None
     telegram_chat_id: str | None
     telegram_thread_id: int | None
@@ -111,6 +114,20 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--tray", action="store_true", help="(ignored) kept for compatibility")
     parser.add_argument("--log", action="store_true", help="Write log output to twitch.log")
     parser.add_argument("--dump", action="store_true", help="Reset debug dump file on start")
+    channel_logs_group = parser.add_mutually_exclusive_group()
+    channel_logs_group.add_argument(
+        "--channel-logs",
+        dest="channel_logs",
+        action="store_true",
+        help="Show channel selection updates in the console output",
+    )
+    channel_logs_group.add_argument(
+        "--no-channel-logs",
+        dest="channel_logs",
+        action="store_false",
+        help="Hide channel selection updates from the console output",
+    )
+    parser.set_defaults(channel_logs=None)
     parser.add_argument(
         "--debug-ws", dest="_debug_ws", action="store_true", help=argparse.SUPPRESS
     )
@@ -158,7 +175,7 @@ def _coerce_wrapper_config(data: Mapping[str, object]) -> WrapperConfig:
         verbose = config["verbose"]
     config["verbose"] = max(0, verbose)
 
-    for key in ("quiet", "log", "dump", "tray"):
+    for key in ("quiet", "log", "dump", "tray", "channel_logs"):
         value = data.get(key, config[key])
         if isinstance(value, bool):
             config[key] = value
@@ -228,6 +245,10 @@ def apply_wrapper_config(args: ParsedArgs, config: WrapperConfig) -> set[str]:
         args.tray = True
         applied.add("tray")
 
+    if args.channel_logs is None and config["channel_logs"]:
+        args.channel_logs = True
+        applied.add("channel_logs")
+
     if args.telegram_token is None:
         token = config["telegram_token"].strip()
         if token:
@@ -284,7 +305,7 @@ class WrapperSettingsManager:
 
 
 def patch_headless_gui(args: ParsedArgs, *, settings_manager: WrapperSettingsManager | None) -> None:
-    from headless_gui import HeadlessGUI, configure_telegram
+    from headless_gui import HeadlessGUI, configure_channel_logging, configure_telegram
     import sys
     from types import ModuleType
 
@@ -294,6 +315,7 @@ def patch_headless_gui(args: ParsedArgs, *, settings_manager: WrapperSettingsMan
         thread_id=args.telegram_thread_id,
         settings_manager=settings_manager if args.telegram_commands else None,
     )
+    configure_channel_logging(bool(args.channel_logs))
     module = sys.modules.get("gui")
     if module is None:
         module = ModuleType("gui")
@@ -323,6 +345,9 @@ async def run_client(args: ParsedArgs) -> int:
     wrapper_config, config_path, created = load_wrapper_config()
     settings_manager = WrapperSettingsManager(config_path)
     applied = apply_wrapper_config(args, wrapper_config)
+
+    if args.channel_logs is None:
+        args.channel_logs = False
 
     console_level = configure_logging(args)
     bootstrap_logger = logging.getLogger("TwitchDrops.bootstrap")
