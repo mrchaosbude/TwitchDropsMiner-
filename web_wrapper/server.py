@@ -3,17 +3,47 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging
+import os
 import signal
 import sys
 import traceback
 from contextlib import suppress
+from pathlib import Path
 from typing import Any
 
-import truststore
-from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-import uvicorn
+# Ensure the original project root is importable and treated as the working dir.
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+# Point argv[0] at main.py so constants.WORKING_DIR resolves to the project root.
+if not os.environ.get("TWITCH_MINER_KEEP_ARGV"):
+    sys.argv[0] = str(PROJECT_ROOT.joinpath("main.py"))
+
+os.chdir(PROJECT_ROOT)
+
+try:
+    from fastapi import FastAPI, HTTPException
+    from fastapi.middleware.cors import CORSMiddleware
+    from fastapi.responses import JSONResponse
+except ModuleNotFoundError as exc:  # pragma: no cover - fastapi is optional
+    raise SystemExit(
+        "FastAPI dependencies are missing. Install optional requirements via"
+        " 'pip install -r requirements.txt' before running the web wrapper."
+    ) from exc
+
+try:
+    import uvicorn
+except ModuleNotFoundError as exc:  # pragma: no cover - optional dependency
+    raise SystemExit(
+        "Uvicorn is missing. Install optional requirements via"
+        " 'pip install -r requirements.txt' before running the web wrapper."
+    ) from exc
+
+try:
+    import truststore
+except ModuleNotFoundError:  # pragma: no cover - optional dependency
+    truststore = None
 
 from constants import (
     FILE_FORMATTER,
@@ -192,7 +222,8 @@ async def run_client(client: Twitch) -> int:
 
 
 async def serve(args: ParsedArgs) -> int:
-    truststore.inject_into_ssl()
+    if truststore is not None:
+        truststore.inject_into_ssl()
     configure_logging(args)
     try:
         settings = Settings(args)
