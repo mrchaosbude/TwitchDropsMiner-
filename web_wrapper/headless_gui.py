@@ -19,6 +19,7 @@ if not os.environ.get("TWITCH_MINER_KEEP_ARGV"):
 
 os.chdir(PROJECT_ROOT)
 
+from constants import PriorityMode
 from exceptions import ExitRequest
 from inventory import DropsCampaign, TimedDrop
 from translate import _
@@ -189,6 +190,24 @@ class LoginRequest:
 
 
 @dataclass
+class SettingsView:
+    priority: List[str] = field(default_factory=list)
+    exclude: List[str] = field(default_factory=list)
+    priority_mode: str = ""
+    priority_mode_value: int = 0
+    priority_mode_label: str = ""
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "priority": list(self.priority),
+            "exclude": list(self.exclude),
+            "priority_mode": self.priority_mode,
+            "priority_mode_value": self.priority_mode_value,
+            "priority_mode_label": self.priority_mode_label,
+        }
+
+
+@dataclass
 class HeadlessState:
     status_text: str = ""
     tray_icon: str = "pickaxe"
@@ -202,6 +221,7 @@ class HeadlessState:
     websockets: Dict[int, WebsocketView] = field(default_factory=dict)
     inventory: Dict[str, CampaignView] = field(default_factory=dict)
     games: List[str] = field(default_factory=list)
+    settings: SettingsView = field(default_factory=SettingsView)
     login_status: str = ""
     login_user_id: Optional[int] = None
     login_request: Optional[LoginRequest] = None
@@ -224,6 +244,7 @@ class HeadlessState:
             },
             "inventory": [campaign.as_dict() for campaign in self.inventory.values()],
             "games": self.games,
+            "settings": self.settings.as_dict(),
             "login": {
                 "status": self.login_status,
                 "user_id": self.login_user_id,
@@ -511,12 +532,56 @@ class InventoryOverview:
 class SettingsPanel:
     def __init__(self, manager: "GUIManager") -> None:
         self._manager = manager
+        self._settings = manager._twitch.settings
+        self.refresh()
 
     def set_games(self, games: set[Game]) -> None:
         self._manager.state.games = sorted(game.name for game in games)
+        self.refresh()
 
     def clear_selection(self) -> None:
         pass
+
+    def refresh(self) -> None:
+        state_settings = self._manager.state.settings
+
+        priority = list(getattr(self._settings, "priority", []))
+        state_settings.priority = priority
+
+        exclude_values = getattr(self._settings, "exclude", set())
+        state_settings.exclude = sorted(exclude_values)
+
+        raw_mode = getattr(self._settings, "priority_mode", PriorityMode.PRIORITY_ONLY)
+        if isinstance(raw_mode, PriorityMode):
+            mode = raw_mode
+        else:
+            try:
+                mode = PriorityMode(raw_mode)
+            except Exception:
+                mode = PriorityMode.PRIORITY_ONLY
+                self._settings.priority_mode = mode
+
+        state_settings.priority_mode = mode.name
+        state_settings.priority_mode_value = int(mode.value)
+        state_settings.priority_mode_label = self._priority_mode_label(mode)
+
+    @staticmethod
+    def _priority_mode_label(mode: PriorityMode) -> str:
+        labels = {
+            PriorityMode.PRIORITY_ONLY: _(
+                "gui", "settings", "priority_modes", "priority_only"
+            ),
+            PriorityMode.ENDING_SOONEST: _(
+                "gui", "settings", "priority_modes", "ending_soonest"
+            ),
+            PriorityMode.LOW_AVBL_FIRST: _(
+                "gui", "settings", "priority_modes", "low_availability"
+            ),
+        }
+        label = labels.get(mode)
+        if label:
+            return label
+        return mode.name.replace("_", " ").title()
 
 
 class Notebook:

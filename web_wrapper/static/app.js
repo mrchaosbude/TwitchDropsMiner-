@@ -16,6 +16,10 @@ const inventoryBox = document.getElementById("inventory");
 const notificationsList = document.getElementById("notifications");
 const logsBox = document.getElementById("logs");
 const websocketsBox = document.getElementById("websockets");
+const priorityModeLabel = document.getElementById("priority-mode-label");
+const priorityModeValue = document.getElementById("priority-mode-value");
+const priorityListBox = document.getElementById("priority-list");
+const excludeListBox = document.getElementById("exclude-list");
 const refreshButton = document.getElementById("refresh-button");
 const clearNotificationsButton = document.getElementById("clear-notifications");
 const shutdownButton = document.getElementById("shutdown-button");
@@ -81,6 +85,65 @@ function createProgressBar(value) {
   span.style.width = `${percentage}%`;
   container.appendChild(span);
   return container;
+}
+
+function renderSettingsList(container, items, emptyText, showIndex = false) {
+  if (!container) {
+    return;
+  }
+  container.innerHTML = "";
+  if (!Array.isArray(items) || !items.length) {
+    const item = document.createElement("li");
+    item.className = "empty-state";
+    item.textContent = emptyText;
+    container.appendChild(item);
+    return;
+  }
+
+  const fragment = document.createDocumentFragment();
+  items.forEach((value, index) => {
+    const item = document.createElement("li");
+    if (showIndex) {
+      const badge = document.createElement("span");
+      badge.className = "order-badge";
+      badge.textContent = String(index + 1);
+      item.appendChild(badge);
+    }
+    const label = document.createElement("span");
+    label.textContent = String(value);
+    item.appendChild(label);
+    fragment.appendChild(item);
+  });
+  container.appendChild(fragment);
+}
+
+function renderSettings(settings) {
+  if (priorityModeLabel) {
+    const label = settings?.priority_mode_label || "Unknown priority mode";
+    priorityModeLabel.textContent = label;
+  }
+
+  if (priorityModeValue) {
+    const key = settings?.priority_mode || "";
+    const value = settings?.priority_mode_value;
+    if (key) {
+      const parts = [`Mode key: ${key}`];
+      if (Number.isFinite(value)) {
+        parts.push(`Value: ${value}`);
+      }
+      priorityModeValue.textContent = parts.join(" · ");
+    } else {
+      priorityModeValue.textContent = "";
+    }
+  }
+
+  renderSettingsList(
+    priorityListBox,
+    settings?.priority,
+    "No games prioritized.",
+    true
+  );
+  renderSettingsList(excludeListBox, settings?.exclude, "No games excluded.");
 }
 
 function renderChannels(channels, watchingChannel, selectedChannel) {
@@ -426,6 +489,7 @@ function updateUI(state) {
   }
 
   renderCurrentDrop(state.current_drop);
+  renderSettings(state.settings);
   renderInventory(state.inventory);
   renderNotifications(state.notifications);
   renderLogs(state.logs);
