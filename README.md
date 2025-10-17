@@ -27,7 +27,7 @@ Every several seconds, the application pretends to watch a particular stream by 
 
 ### Headless web wrapper:
 
-The repository also includes an optional web-based wrapper that mirrors the desktop application's behaviour without modifying the original sources. This allows you to run the miner on a server and control it through HTTP requests or a custom web client.
+The repository also includes an optional web-based wrapper that mirrors the desktop application's behaviour without modifying the original sources. This allows you to run the miner on a server and control it through HTTP requests or the bundled single-page web UI.
 
 1. Install the Python dependencies listed in `requirements.txt` (FastAPI and uvicorn are required for the wrapper).
 2. From the repository directory, start the wrapper with:
@@ -36,7 +36,12 @@ The repository also includes an optional web-based wrapper that mirrors the desk
    python -m web_wrapper.server --host 0.0.0.0 --port 8000
    ```
 
-3. Interact with the miner using the exposed REST endpoints, for example:
+3. Open `http://<host>:<port>/` in your browser to launch the web interface. The UI provides:
+   - Real-time status, logs, notifications, and drop progress mirrored from the desktop app.
+   - Login forms for credential or device-code prompts initiated by the miner.
+   - Channel switching, shutdown, and notification clearing controls.
+
+4. Interact with the miner programmatically through the REST endpoints if desired:
    - `GET /state` to retrieve the mirrored GUI state (campaigns, channels, progress, etc.).
    - `POST /login/credentials` or `POST /login/device` to complete login prompts initiated by the miner.
    - `POST /channels/switch` to change the active channel.

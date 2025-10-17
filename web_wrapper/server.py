@@ -25,7 +25,8 @@ os.chdir(PROJECT_ROOT)
 try:
     from fastapi import FastAPI, HTTPException
     from fastapi.middleware.cors import CORSMiddleware
-    from fastapi.responses import JSONResponse
+    from fastapi.responses import FileResponse, JSONResponse
+    from fastapi.staticfiles import StaticFiles
 except ModuleNotFoundError as exc:  # pragma: no cover - fastapi is optional
     raise SystemExit(
         "FastAPI dependencies are missing. Install optional requirements via"
@@ -61,6 +62,9 @@ from version import __version__
 
 # Install the headless GUI adapter before importing twitch
 from web_wrapper import headless_gui
+
+STATIC_DIR = Path(__file__).with_name("static")
+INDEX_PATH = STATIC_DIR.joinpath("index.html")
 
 sys.modules.setdefault("gui", headless_gui)
 
@@ -140,6 +144,19 @@ def create_app(client: Twitch) -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    if STATIC_DIR.exists():
+        app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+    else:  # pragma: no cover - development safeguard
+        logging.getLogger("uvicorn.error").warning(
+            "Web UI static assets not found at %s", STATIC_DIR
+        )
+
+    @app.get("/", include_in_schema=False)
+    async def serve_index() -> FileResponse:
+        if not INDEX_PATH.exists():
+            raise HTTPException(status_code=404, detail="Web UI not available")
+        return FileResponse(INDEX_PATH)
 
     @app.get("/state")
     async def get_state() -> JSONResponse:
