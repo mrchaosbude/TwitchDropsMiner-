@@ -49,6 +49,7 @@ The repository also includes an optional web-based wrapper that mirrors the desk
    - `POST /shutdown` to request a graceful shutdown.
    - `POST /settings/priority/add` (body: `{ "game": "Name", "position": 1 }`) to insert or move a game in the priority list.
    - `POST /settings/priority/remove` (body: `{ "game": "Name" }`) to delete a game from the priority list.
+   - `POST /settings/priority/mode` (body: `{ "mode": "PRIORITY_ONLY" }`) to switch the global priority mode.
    - `POST /settings/exclude/add` (body: `{ "game": "Name" }`) to add a game to the exclusion list.
    - `POST /settings/exclude/remove` (body: `{ "game": "Name" }`) to allow a previously excluded game again.
 

@@ -172,6 +172,19 @@ def create_app(client: Twitch) -> FastAPI:
             raise HTTPException(status_code=400, detail="position must be a positive integer")
         return raw_value - 1
 
+    def _require_priority_mode(payload: dict[str, Any]) -> Any:
+        if "mode" not in payload:
+            raise HTTPException(status_code=400, detail="Field 'mode' must be provided")
+        value = payload["mode"]
+        if isinstance(value, str):
+            stripped = value.strip()
+            if not stripped:
+                raise HTTPException(status_code=400, detail="Field 'mode' must be a non-empty string")
+            return stripped
+        if value is None:
+            raise HTTPException(status_code=400, detail="Field 'mode' must be provided")
+        return value
+
     @app.get("/", include_in_schema=False)
     async def serve_index() -> FileResponse:
         if not INDEX_PATH.exists():
@@ -273,6 +286,32 @@ def create_app(client: Twitch) -> FastAPI:
                 "status": "ok",
                 "action": action,
                 "priority": values,
+                "message": message,
+            }
+        )
+
+    @app.post("/settings/priority/mode")
+    async def update_priority_mode(payload: dict[str, Any]) -> JSONResponse:
+        mode_value = _require_priority_mode(payload)
+        try:
+            mode, action = client.gui.settings.set_priority_mode(mode_value)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        label = client.gui.state.settings.priority_mode_label
+        if action == "updated":
+            message = f"Priority mode updated to {label}."
+        else:
+            message = f"Priority mode already set to {label}."
+        return JSONResponse(
+            {
+                "status": "ok",
+                "action": action,
+                "priority_mode": {
+                    "key": mode.name,
+                    "value": int(mode.value),
+                    "label": label,
+                },
+                "priority_modes": client.gui.state.settings.priority_modes,
                 "message": message,
             }
         )

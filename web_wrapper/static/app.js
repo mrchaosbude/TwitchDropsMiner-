@@ -18,6 +18,8 @@ const logsBox = document.getElementById("logs");
 const websocketsBox = document.getElementById("websockets");
 const priorityModeLabel = document.getElementById("priority-mode-label");
 const priorityModeValue = document.getElementById("priority-mode-value");
+const priorityModeForm = document.getElementById("priority-mode-form");
+const priorityModeSelect = document.getElementById("priority-mode-select");
 const priorityListBox = document.getElementById("priority-list");
 const excludeListBox = document.getElementById("exclude-list");
 const priorityForm = document.getElementById("priority-form");
@@ -215,6 +217,41 @@ function renderSettings(settings) {
     } else {
       priorityModeValue.textContent = "";
     }
+  }
+
+  if (priorityModeSelect) {
+    const modes = Array.isArray(settings?.priority_modes)
+      ? settings.priority_modes
+      : [];
+    const currentKey = settings?.priority_mode || "";
+    priorityModeSelect.innerHTML = "";
+    if (!modes.length) {
+      const option = document.createElement("option");
+      option.value = "";
+      option.textContent = "No priority modes available";
+      option.disabled = true;
+      option.selected = true;
+      priorityModeSelect.appendChild(option);
+      priorityModeSelect.disabled = true;
+    } else {
+      priorityModeSelect.disabled = false;
+      modes.forEach((mode) => {
+        if (!mode || typeof mode.key !== "string") {
+          return;
+        }
+        const option = document.createElement("option");
+        option.value = mode.key;
+        option.textContent = mode.label || mode.key;
+        if (mode.selected || mode.key === currentKey) {
+          option.selected = true;
+        }
+        priorityModeSelect.appendChild(option);
+      });
+      if (!priorityModeSelect.value && currentKey) {
+        priorityModeSelect.value = currentKey;
+      }
+    }
+    priorityModeSelect.dataset.current = currentKey;
   }
 
   renderSettingsList(
@@ -687,6 +724,44 @@ if (excludeForm) {
     } catch (error) {
       showToast(`Failed to exclude ${game}: ${error.message}`, "error");
     }
+  });
+}
+
+if (priorityModeForm) {
+  priorityModeForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (!priorityModeSelect || priorityModeSelect.disabled) {
+      return;
+    }
+    const mode = priorityModeSelect.value;
+    const current = priorityModeSelect.dataset.current || "";
+    if (!mode) {
+      showToast("Select a priority mode to apply.", "error");
+      return;
+    }
+    if (mode === current) {
+      showToast("Priority mode already active.");
+      return;
+    }
+    try {
+      const response = await apiRequest("/settings/priority/mode", {
+        method: "POST",
+        body: JSON.stringify({ mode }),
+      });
+      showToast(response?.message || "Priority mode updated.");
+      await fetchState();
+    } catch (error) {
+      showToast(`Failed to update priority mode: ${error.message}`, "error");
+    }
+  });
+}
+
+if (priorityModeSelect) {
+  priorityModeSelect.addEventListener("change", () => {
+    if (!priorityModeForm) {
+      return;
+    }
+    priorityModeForm.requestSubmit();
   });
 }
 

@@ -196,6 +196,7 @@ class SettingsView:
     priority_mode: str = ""
     priority_mode_value: int = 0
     priority_mode_label: str = ""
+    priority_modes: List[dict[str, Any]] = field(default_factory=list)
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -204,6 +205,7 @@ class SettingsView:
             "priority_mode": self.priority_mode,
             "priority_mode_value": self.priority_mode_value,
             "priority_mode_label": self.priority_mode_label,
+            "priority_modes": list(self.priority_modes),
         }
 
 
@@ -571,6 +573,15 @@ class SettingsPanel:
         state_settings.priority_mode = mode.name
         state_settings.priority_mode_value = int(mode.value)
         state_settings.priority_mode_label = self._priority_mode_label(mode)
+        state_settings.priority_modes = [
+            {
+                "key": candidate.name,
+                "value": int(candidate.value),
+                "label": self._priority_mode_label(candidate),
+                "selected": candidate is mode,
+            }
+            for candidate in PriorityMode
+        ]
 
     def add_priority(self, game: str, *, position: Optional[int] = None) -> tuple[list[str], str]:
         name = self._normalize_game(game)
@@ -639,6 +650,51 @@ class SettingsPanel:
         self._settings.save()
         self.refresh()
         return sorted(exclude_values), "removed"
+
+    def set_priority_mode(self, mode: Any) -> tuple[PriorityMode, str]:
+        if isinstance(mode, PriorityMode):
+            selected_mode = mode
+        else:
+            selected_mode = self._parse_priority_mode(mode)
+
+        current_mode_raw = getattr(self._settings, "priority_mode", PriorityMode.PRIORITY_ONLY)
+        if isinstance(current_mode_raw, PriorityMode):
+            current_mode = current_mode_raw
+        else:
+            try:
+                current_mode = PriorityMode(current_mode_raw)
+            except Exception:
+                current_mode = PriorityMode.PRIORITY_ONLY
+
+        if selected_mode is current_mode:
+            self.refresh()
+            return selected_mode, "unchanged"
+
+        self._settings.priority_mode = selected_mode
+        self._settings.save()
+        self.refresh()
+        return selected_mode, "updated"
+
+    @staticmethod
+    def _parse_priority_mode(mode: Any) -> PriorityMode:
+        if isinstance(mode, str):
+            value = mode.strip()
+            if not value:
+                raise ValueError("Priority mode must not be empty")
+            upper_value = value.upper()
+            if upper_value in PriorityMode.__members__:
+                return PriorityMode[upper_value]
+            try:
+                numeric = int(value)
+                return PriorityMode(numeric)
+            except Exception as exc:
+                raise ValueError(f"Invalid priority mode: {mode}") from exc
+        if isinstance(mode, (int, float)) and not isinstance(mode, bool):
+            try:
+                return PriorityMode(int(mode))
+            except Exception as exc:
+                raise ValueError(f"Invalid priority mode: {mode}") from exc
+        raise ValueError("Priority mode must be a valid enum name or value")
 
     @staticmethod
     def _priority_mode_label(mode: PriorityMode) -> str:
