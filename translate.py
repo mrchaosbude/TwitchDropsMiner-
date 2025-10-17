@@ -427,6 +427,7 @@ class Translator:
         # if we're in dev, update the template English.json file
         if not IS_PACKAGED:
             default_langpath = LANG_PATH.joinpath(f"{DEFAULT_LANG}.json")
+            default_langpath.parent.mkdir(parents=True, exist_ok=True)
             json_save(default_langpath, default_translation)
         self._translation["language_name"] = DEFAULT_LANG
         # load available translation names
