@@ -37,6 +37,34 @@ let toastTimer = null;
 let fetchingState = false;
 let latestGames = [];
 
+function resolveCollapsibleEntries(container, entries, threshold = 5) {
+  const list = Array.isArray(entries) ? entries : [];
+  if (!container || !list.length) {
+    if (container) {
+      delete container.dataset.collapsed;
+    }
+    return { isCollapsible: false, isCollapsed: false, visibleEntries: list };
+  }
+
+  const collapseThreshold = Number.isFinite(threshold) && threshold > 0 ? threshold : null;
+  const isCollapsible =
+    collapseThreshold !== null && Array.isArray(list) && list.length > collapseThreshold;
+
+  if (!isCollapsible) {
+    delete container.dataset.collapsed;
+  } else if (!("collapsed" in container.dataset)) {
+    container.dataset.collapsed = "true";
+  }
+
+  const isCollapsed = isCollapsible && container.dataset.collapsed !== "false";
+  const visibleEntries =
+    isCollapsible && collapseThreshold !== null && isCollapsed
+      ? list.slice(0, collapseThreshold)
+      : list;
+
+  return { isCollapsible, isCollapsed, visibleEntries };
+}
+
 function showToast(message, type = "info") {
   toast.textContent = message;
   toast.classList.remove("hidden");
@@ -304,7 +332,10 @@ function renderSettings(settings) {
 
 function renderChannels(channels, watchingChannel, selectedChannel) {
   channelList.innerHTML = "";
-  if (!channels?.length) {
+  const channelEntries = Array.isArray(channels) ? channels : [];
+
+  if (!channelEntries.length) {
+    delete channelList.dataset.collapsed;
     const empty = document.createElement("p");
     empty.className = "empty-state";
     empty.textContent = "No channels available.";
@@ -312,8 +343,13 @@ function renderChannels(channels, watchingChannel, selectedChannel) {
     return;
   }
 
+  const { isCollapsible, visibleEntries } = resolveCollapsibleEntries(
+    channelList,
+    channelEntries
+  );
+
   const fragment = document.createDocumentFragment();
-  channels.forEach((channel) => {
+  visibleEntries.forEach((channel) => {
     const wrapper = document.createElement("div");
     wrapper.className = "channel";
     if (channel.id === watchingChannel) {
@@ -376,6 +412,25 @@ function renderChannels(channels, watchingChannel, selectedChannel) {
   });
 
   channelList.appendChild(fragment);
+
+  if (isCollapsible) {
+    const toggleWrapper = document.createElement("div");
+    toggleWrapper.className = "list-toggle";
+    const toggleButton = document.createElement("button");
+    toggleButton.type = "button";
+    toggleButton.className = "list-toggle-button";
+    const hiddenCount = channelEntries.length - visibleEntries.length;
+    toggleButton.textContent = channelList.dataset.collapsed !== "false"
+      ? `Show ${hiddenCount} more`
+      : "Show less";
+    toggleButton.addEventListener("click", () => {
+      const currentlyCollapsed = channelList.dataset.collapsed !== "false";
+      channelList.dataset.collapsed = currentlyCollapsed ? "false" : "true";
+      renderChannels(channelEntries, watchingChannel, selectedChannel);
+    });
+    toggleWrapper.appendChild(toggleButton);
+    channelList.appendChild(toggleWrapper);
+  }
 }
 
 function renderCurrentDrop(drop) {
@@ -453,7 +508,10 @@ function renderCurrentDrop(drop) {
 
 function renderInventory(campaigns) {
   inventoryBox.innerHTML = "";
-  if (!campaigns?.length) {
+  const campaignEntries = Array.isArray(campaigns) ? campaigns : [];
+
+  if (!campaignEntries.length) {
+    delete inventoryBox.dataset.collapsed;
     const empty = document.createElement("p");
     empty.className = "empty-state";
     empty.textContent = "No campaign data available.";
@@ -461,8 +519,13 @@ function renderInventory(campaigns) {
     return;
   }
 
+  const { isCollapsible, visibleEntries } = resolveCollapsibleEntries(
+    inventoryBox,
+    campaignEntries
+  );
+
   const fragment = document.createDocumentFragment();
-  campaigns.forEach((campaign) => {
+  visibleEntries.forEach((campaign) => {
     const wrapper = document.createElement("div");
     wrapper.className = "campaign";
 
@@ -527,6 +590,25 @@ function renderInventory(campaigns) {
   });
 
   inventoryBox.appendChild(fragment);
+
+  if (isCollapsible) {
+    const toggleWrapper = document.createElement("div");
+    toggleWrapper.className = "list-toggle";
+    const toggleButton = document.createElement("button");
+    toggleButton.type = "button";
+    toggleButton.className = "list-toggle-button";
+    const hiddenCount = campaignEntries.length - visibleEntries.length;
+    toggleButton.textContent = inventoryBox.dataset.collapsed !== "false"
+      ? `Show ${hiddenCount} more`
+      : "Show less";
+    toggleButton.addEventListener("click", () => {
+      const currentlyCollapsed = inventoryBox.dataset.collapsed !== "false";
+      inventoryBox.dataset.collapsed = currentlyCollapsed ? "false" : "true";
+      renderInventory(campaignEntries);
+    });
+    toggleWrapper.appendChild(toggleButton);
+    inventoryBox.appendChild(toggleWrapper);
+  }
 }
 
 function renderNotifications(notifications) {
