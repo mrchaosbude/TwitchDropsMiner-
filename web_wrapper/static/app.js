@@ -97,7 +97,7 @@ function createProgressBar(value) {
 }
 
 function renderSettingsList(container, items, emptyText, options = {}) {
-  const { showIndex = false, onRemove = null } = options;
+  const { showIndex = false, onRemove = null, collapseThreshold = 5 } = options;
   if (!container) {
     return;
   }
@@ -111,7 +111,25 @@ function renderSettingsList(container, items, emptyText, options = {}) {
   }
 
   const fragment = document.createDocumentFragment();
-  items.forEach((value, index) => {
+  const entries = Array.isArray(items)
+    ? items.map((value, index) => ({ value, index }))
+    : [];
+
+  const isCollapsible =
+    Number.isFinite(collapseThreshold) && collapseThreshold > 0 && entries.length > collapseThreshold;
+
+  if (!isCollapsible) {
+    delete container.dataset.collapsed;
+  } else if (!("collapsed" in container.dataset)) {
+    container.dataset.collapsed = "true";
+  }
+
+  const isCollapsed = container.dataset.collapsed !== "false";
+  const visibleEntries = isCollapsible && isCollapsed
+    ? entries.slice(0, collapseThreshold)
+    : entries;
+
+  visibleEntries.forEach(({ value, index }) => {
     const item = document.createElement("li");
     if (showIndex) {
       const badge = document.createElement("span");
@@ -135,6 +153,25 @@ function renderSettingsList(container, items, emptyText, options = {}) {
     fragment.appendChild(item);
   });
   container.appendChild(fragment);
+
+  if (isCollapsible) {
+    const toggleItem = document.createElement("li");
+    toggleItem.className = "list-toggle";
+    const toggleButton = document.createElement("button");
+    toggleButton.type = "button";
+    toggleButton.className = "list-toggle-button";
+    const hiddenCount = entries.length - visibleEntries.length;
+    toggleButton.textContent = isCollapsed
+      ? `Show ${hiddenCount} more`
+      : "Show less";
+    toggleButton.addEventListener("click", () => {
+      const currentlyCollapsed = container.dataset.collapsed !== "false";
+      container.dataset.collapsed = currentlyCollapsed ? "false" : "true";
+      renderSettingsList(container, items, emptyText, options);
+    });
+    toggleItem.appendChild(toggleButton);
+    container.appendChild(toggleItem);
+  }
 }
 
 function populateGameOptions(games) {
