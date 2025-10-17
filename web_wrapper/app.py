@@ -1,15 +1,25 @@
 """FastAPI application exposing the Twitch Drops Miner functionality."""
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
+
+from constants import PriorityMode
 
 from .controller import MinerController
 
+BASE_DIR = Path(__file__).resolve().parent
+
 app = FastAPI(title="Twitch Drops Miner Web Wrapper")
 controller = MinerController()
+templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
+app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 
 
 class LoginRequest(BaseModel):
@@ -30,6 +40,18 @@ class SettingsUpdate(BaseModel):
     connection_quality: Optional[int] = Field(default=None, ge=1, le=6)
     tray_notifications: Optional[bool] = None
     priority_mode: Optional[str] = Field(default=None, description="PriorityMode enum name")
+
+
+@app.get("/", response_class=HTMLResponse)
+async def index(request: Request) -> HTMLResponse:
+    """Serve the interactive web dashboard."""
+    return templates.TemplateResponse(
+        "index.html",
+        {
+            "request": request,
+            "priority_modes": [mode.name for mode in PriorityMode],
+        },
+    )
 
 
 @app.get("/state")

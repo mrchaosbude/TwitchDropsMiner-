@@ -87,7 +87,15 @@ To run the wrapper:
    uvicorn web_wrapper.app:app --host 0.0.0.0 --port 8000
    ```
 
-3. Interact with the API endpoints:
+3. Open `http://localhost:8000/` in your browser to access the dashboard. The UI mirrors the desktop application and shows:
+
+   - Current miner status, active drop progress, and last error (if any).
+   - Available channels with their games, online state, drops eligibility, and viewer counts.
+   - Inventory progress for every tracked campaign.
+   - Login status, device-code prompts, websocket health, notifications, and live logs.
+   - Inline controls to start/stop the miner, submit login credentials, pick a channel, and edit settings.
+
+4. The JSON API remains available alongside the UI:
 
    - `POST /start` – start the miner.
    - `POST /login` – submit Twitch credentials (username, password, optional 2FA token).
