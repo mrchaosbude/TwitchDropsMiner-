@@ -1,6 +1,8 @@
 """FastAPI application exposing the Twitch Drops Miner functionality."""
 from __future__ import annotations
 
+import os
+import sys
 from pathlib import Path
 from typing import Optional
 
@@ -9,6 +11,20 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
+
+
+def _prepare_runtime_environment() -> None:
+    """Ensure the legacy application resolves resources relative to the repo root."""
+
+    repo_root = Path(__file__).resolve().parent.parent
+    if repo_root.joinpath("lang").exists():
+        sys.argv[0] = str(repo_root / "main.py")
+        if str(repo_root) not in sys.path:
+            sys.path.insert(0, str(repo_root))
+        os.chdir(repo_root)
+
+
+_prepare_runtime_environment()
 
 from constants import PriorityMode
 

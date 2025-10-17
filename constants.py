@@ -92,14 +92,6 @@ else:
     if SELF_PATH.stem == "pyinstaller" or SELF_PATH.name == "gui.py":
         SELF_PATH = Path(__file__).with_name("main.py").resolve()
 WORKING_DIR = SELF_PATH.parent
-if not IS_PACKAGED and not WORKING_DIR.joinpath("lang").exists():
-    # When running via an external launcher (e.g. uvicorn) sys.argv[0] can point to
-    # the launcher's executable which lives outside of the project directory. In
-    # that scenario fall back to the repository root derived from this file.
-    dev_root = Path(__file__).resolve().parent
-    if dev_root.joinpath("lang").exists():
-        SELF_PATH = dev_root.joinpath("main.py")
-        WORKING_DIR = dev_root
 # Development paths
 VENV_PATH = Path(WORKING_DIR, "env")
 SITE_PACKAGES_PATH = Path(VENV_PATH, SYS_SITE_PACKAGES)
