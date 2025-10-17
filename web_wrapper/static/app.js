@@ -510,7 +510,18 @@ function renderInventory(campaigns) {
   inventoryBox.innerHTML = "";
   const campaignEntries = Array.isArray(campaigns) ? campaigns : [];
 
-  if (!campaignEntries.length) {
+  const prioritizedCampaigns = [];
+  const deferredCampaigns = [];
+  campaignEntries.forEach((campaign) => {
+    if (campaign?.linked === false) {
+      deferredCampaigns.push(campaign);
+    } else {
+      prioritizedCampaigns.push(campaign);
+    }
+  });
+  const orderedCampaigns = prioritizedCampaigns.concat(deferredCampaigns);
+
+  if (!orderedCampaigns.length) {
     delete inventoryBox.dataset.collapsed;
     const empty = document.createElement("p");
     empty.className = "empty-state";
@@ -521,7 +532,7 @@ function renderInventory(campaigns) {
 
   const { isCollapsible, visibleEntries } = resolveCollapsibleEntries(
     inventoryBox,
-    campaignEntries
+    orderedCampaigns
   );
 
   const fragment = document.createDocumentFragment();
@@ -597,7 +608,7 @@ function renderInventory(campaigns) {
     const toggleButton = document.createElement("button");
     toggleButton.type = "button";
     toggleButton.className = "list-toggle-button";
-    const hiddenCount = campaignEntries.length - visibleEntries.length;
+    const hiddenCount = orderedCampaigns.length - visibleEntries.length;
     toggleButton.textContent = inventoryBox.dataset.collapsed !== "false"
       ? `Show ${hiddenCount} more`
       : "Show less";
