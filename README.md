@@ -69,6 +69,35 @@ Every several seconds, the application pretends to watch a particular stream by 
 
 If you'd be interested in running the latest master from source or building your own executable, see the wiki page explaining how to do so: https://github.com/DevilXD/TwitchDropsMiner/wiki/Setting-up-the-environment,-building-and-running
 
+### Headless Web Wrapper
+
+This repository includes an optional FastAPI-based wrapper that exposes the miner through a web API. The wrapper leaves the original application untouched, so new upstream releases can still be dropped into the folder.
+
+To run the wrapper:
+
+1. Install the additional dependencies:
+
+   ```bash
+   python -m pip install -r requirements.txt
+   ```
+
+2. Start the web server (the example below uses the default `uvicorn` host/port):
+
+   ```bash
+   uvicorn web_wrapper.app:app --host 0.0.0.0 --port 8000
+   ```
+
+3. Interact with the API endpoints:
+
+   - `POST /start` – start the miner.
+   - `POST /login` – submit Twitch credentials (username, password, optional 2FA token).
+   - `POST /select-channel` – request a specific channel to be prioritised.
+   - `GET /state` – obtain a JSON snapshot covering status, inventory, channels and notifications.
+   - `PATCH /settings` – update miner settings (priority lists, language, connection quality, etc.).
+   - `POST /stop` – gracefully stop the miner.
+
+The wrapper stores runtime information in memory and writes changes to the existing configuration files, ensuring compatibility with future updates of the upstream project.
+
 ### Support
 
 <div align="center">
