@@ -12,6 +12,8 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
 
+from .runtime_support import ensure_legacy_constants
+
 
 def _prepare_runtime_environment() -> None:
     """Ensure the legacy application resolves resources relative to the repo root."""
@@ -22,6 +24,7 @@ def _prepare_runtime_environment() -> None:
         if str(repo_root) not in sys.path:
             sys.path.insert(0, str(repo_root))
         os.chdir(repo_root)
+        ensure_legacy_constants(repo_root)
 
 
 _prepare_runtime_environment()
