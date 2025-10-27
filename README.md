@@ -25,6 +25,30 @@ Every several seconds, the application pretends to watch a particular stream by 
 - If you wish to keep the miner occupied with mining anything it can, beyond what you've selected via the Priority List, you can use the Priority Mode setting to specify the mining order for the rest of the games.
 - Make sure to link your Twitch account to game accounts on the [campaigns page](https://www.twitch.tv/drops/campaigns), to enable more games to be mined.
 
+### Headless web wrapper:
+
+The repository also includes an optional web-based wrapper that mirrors the desktop application's behaviour without modifying the original sources. This allows you to run the miner on a server and control it through HTTP requests or the bundled single-page web UI.
+
+1. Install the Python dependencies listed in `requirements.txt` (FastAPI and uvicorn are required for the wrapper).
+2. From the repository directory, start the wrapper with:
+
+   ```bash
+   python -m web_wrapper.server --host 0.0.0.0 --port 8000
+   ```
+
+3. Open `http://<host>:<port>/` in your browser to launch the web interface. The UI provides:
+   - Real-time status, logs, notifications, and drop progress mirrored from the desktop app.
+   - Login forms for credential or device-code prompts initiated by the miner.
+   - Channel switching, shutdown, and notification clearing controls.
+
+4. Interact with the miner programmatically through the REST endpoints if desired:
+   - `GET /state` to retrieve the mirrored GUI state (campaigns, channels, progress, etc.).
+   - `POST /login/credentials` or `POST /login/device` to complete login prompts initiated by the miner.
+   - `POST /channels/switch` to change the active channel.
+   - `POST /shutdown` to request a graceful shutdown.
+
+The wrapper installs a headless GUI adapter at runtime, so future updates to the core application can still be dropped into the same directory without further changes.
+
 ### Pictures:
 
 ![Main](https://user-images.githubusercontent.com/4180725/164298155-c0880ad7-6423-4419-8d73-f3c053730a1b.png)
