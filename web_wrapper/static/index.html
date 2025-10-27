@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Twitch Drops Miner Web UI</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <header class="app-header">
+      <div class="status">
+        <h1>Twitch Drops Miner</h1>
+        <p id="status-text">Loading state…</p>
+        <p class="tray" id="tray-title"></p>
+      </div>
+      <div class="actions">
+        <button id="refresh-button" type="button">Refresh</button>
+        <button id="clear-notifications" type="button">Clear notifications</button>
+        <button id="shutdown-button" type="button" class="danger">Shutdown miner</button>
+      </div>
+    </header>
+    <main>
+      <section class="card" id="login-section">
+        <h2>Login</h2>
+        <p id="login-status"></p>
+        <p id="login-user"></p>
+        <div id="login-request" class="hidden">
+          <p id="login-message"></p>
+          <form id="credentials-form" class="hidden">
+            <label>
+              Username
+              <input type="text" name="username" required autocomplete="username" />
+            </label>
+            <label>
+              Password
+              <input type="password" name="password" required autocomplete="current-password" />
+            </label>
+            <label>
+              2FA / Auth Token (optional)
+              <input type="text" name="token" autocomplete="one-time-code" />
+            </label>
+            <div class="form-actions">
+              <button type="submit">Submit credentials</button>
+            </div>
+          </form>
+          <div id="device-form" class="hidden">
+            <p>
+              Visit <a id="device-url" href="#" target="_blank" rel="noreferrer"></a>
+              and enter the following code:
+            </p>
+            <p class="device-code" id="device-code"></p>
+            <button type="button" id="device-confirm">I have authorized the device</button>
+          </div>
+        </div>
+      </section>
+      <section class="card" id="channels-section">
+        <h2>Channels</h2>
+        <p id="current-channel"></p>
+        <div class="channel-list" id="channel-list"></div>
+      </section>
+      <section class="card" id="current-drop-section">
+        <h2>Current Drop</h2>
+        <div id="current-drop"></div>
+      </section>
+      <section class="card" id="settings-section">
+        <h2>Settings</h2>
+        <div class="settings-grid">
+          <div class="settings-block">
+            <h3>Priority Mode</h3>
+            <p id="priority-mode-label" class="settings-mode-label">Loading…</p>
+            <p id="priority-mode-value" class="muted"></p>
+            <form id="priority-mode-form" class="settings-form">
+              <div class="settings-form-row">
+                <select id="priority-mode-select" name="mode" aria-label="Select priority mode">
+                  <option value="" disabled selected>Loading modes…</option>
+                </select>
+                <button type="submit">Apply</button>
+              </div>
+              <p class="form-hint">Choose how the miner orders drops.</p>
+            </form>
+          </div>
+          <div class="settings-block">
+            <h3>Priority List</h3>
+            <form id="priority-form" class="settings-form">
+              <div class="settings-form-row">
+                <input
+                  type="text"
+                  id="priority-game"
+                  name="game"
+                  list="games-options"
+                  placeholder="Add game to priority"
+                  autocomplete="off"
+                  required
+                />
+                <input
+                  type="number"
+                  id="priority-position"
+                  name="position"
+                  min="1"
+                  placeholder="Position"
+                  inputmode="numeric"
+                />
+                <button type="submit">Add</button>
+              </div>
+              <p class="form-hint">Leave position blank to append at the end.</p>
+            </form>
+            <ul id="priority-list" class="settings-list"></ul>
+          </div>
+          <div class="settings-block">
+            <h3>Excluded Games</h3>
+            <form id="exclude-form" class="settings-form">
+              <div class="settings-form-row">
+                <input
+                  type="text"
+                  id="exclude-game"
+                  name="game"
+                  list="games-options"
+                  placeholder="Add game to exclude"
+                  autocomplete="off"
+                  required
+                />
+                <button type="submit">Add</button>
+              </div>
+            </form>
+            <ul id="exclude-list" class="settings-list"></ul>
+          </div>
+        </div>
+        <datalist id="games-options"></datalist>
+      </section>
+      <section class="card" id="inventory-section">
+        <h2>Inventory</h2>
+        <div id="inventory"></div>
+      </section>
+      <section class="card" id="notifications-section">
+        <h2>Notifications</h2>
+        <ul id="notifications"></ul>
+      </section>
+      <section class="card" id="logs-section">
+        <h2>Logs</h2>
+        <pre id="logs" class="logs"></pre>
+      </section>
+      <section class="card" id="websockets-section">
+        <h2>Websockets</h2>
+        <div id="websockets"></div>
+      </section>
+    </main>
+    <div id="toast" class="toast hidden"></div>
+    <script src="/static/app.js" type="module"></script>
+  </body>
+</html>
