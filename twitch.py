@@ -16,7 +16,6 @@ import aiohttp
 from yarl import URL
 
 from translate import _
-from gui import GUIManager
 from channel import Channel
 from websocket import WebsocketPool
 from inventory import DropsCampaign
@@ -421,7 +420,12 @@ class _AuthState:
 
 
 class Twitch:
-    def __init__(self, settings: Settings):
+    def __init__(
+        self,
+        settings: Settings,
+        *,
+        gui_factory: type[Any] | None = None,
+    ):
         self.settings: Settings = settings
         # State management
         self._state: State = State.IDLE
@@ -438,8 +442,12 @@ class Twitch:
         self._client_type: ClientInfo = ClientType.ANDROID_APP
         self._session: aiohttp.ClientSession | None = None
         self._auth_state: _AuthState = _AuthState(self)
-        # GUI
-        self.gui = GUIManager(self)
+        # GUI/CLI interface
+        if gui_factory is None:
+            from gui import GUIManager as DefaultGUIManager  # type: ignore
+
+            gui_factory = DefaultGUIManager
+        self.gui = gui_factory(self)
         # Storing and watching channels
         self.channels: OrderedDict[int, Channel] = OrderedDict()
         self.watching_channel: AwaitableValue[Channel] = AwaitableValue()
