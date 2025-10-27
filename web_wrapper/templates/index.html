@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Twitch Drops Miner Dashboard</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" />
+    <link rel="stylesheet" href="/static/css/styles.css" />
+</head>
+<body>
+    <header class="app-header">
+        <div class="container">
+            <div class="branding">
+                <h1>Twitch Drops Miner</h1>
+                <p class="subtitle">Web Dashboard</p>
+            </div>
+            <div class="actions">
+                <button id="start-btn" class="btn primary">Start Miner</button>
+                <button id="stop-btn" class="btn">Stop Miner</button>
+            </div>
+        </div>
+    </header>
+
+    <main class="container">
+        <section class="status-card">
+            <div class="status-indicator" id="running-indicator">Stopped</div>
+            <div class="status-text">
+                <h2>Status</h2>
+                <p id="status-text">Loading&hellip;</p>
+            </div>
+            <div class="status-meta">
+                <div>
+                    <span class="label">Watching</span>
+                    <span id="watching-channel">-</span>
+                </div>
+                <div>
+                    <span class="label">Selected</span>
+                    <span id="selected-channel">-</span>
+                </div>
+            </div>
+            <div class="status-error hidden" id="last-error"></div>
+        </section>
+
+        <section class="grid two-columns">
+            <article class="card">
+                <header class="card-header">
+                    <h2>Current Drop</h2>
+                </header>
+                <div class="card-body" id="drop-info">
+                    <p class="empty">No active drop.</p>
+                </div>
+            </article>
+
+            <article class="card">
+                <header class="card-header">
+                    <h2>Login</h2>
+                </header>
+                <div class="card-body">
+                    <p class="muted" id="login-status">Checking login status&hellip;</p>
+                    <form id="login-form" class="form">
+                        <label>
+                            <span>Username</span>
+                            <input type="text" name="username" autocomplete="username" required />
+                        </label>
+                        <label>
+                            <span>Password</span>
+                            <input type="password" name="password" autocomplete="current-password" required />
+                        </label>
+                        <label>
+                            <span>2FA / Auth Token (optional)</span>
+                            <input type="text" name="token" autocomplete="one-time-code" />
+                        </label>
+                        <button type="submit" class="btn primary">Submit Login</button>
+                    </form>
+                    <div id="device-login" class="device-login hidden">
+                        <p><strong>Device Code:</strong> <span id="device-code">-</span></p>
+                        <p><strong>Verification Link:</strong> <a id="verification-link" href="#" target="_blank" rel="noopener noreferrer">Open</a></p>
+                    </div>
+                </div>
+            </article>
+        </section>
+
+        <section class="card">
+            <header class="card-header">
+                <h2>Available Channels</h2>
+                <p class="muted">Click a channel to set it as the preferred target.</p>
+            </header>
+            <div class="table-wrapper">
+                <table class="data-table" id="channels-table">
+                    <thead>
+                        <tr>
+                            <th>Channel</th>
+                            <th>Game</th>
+                            <th>Status</th>
+                            <th>Drops</th>
+                            <th>Viewers</th>
+                        </tr>
+                    </thead>
+                    <tbody id="channels-body">
+                        <tr class="empty"><td colspan="5">No channels available.</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="card">
+            <header class="card-header">
+                <h2>Inventory</h2>
+                <p class="muted">Overview of tracked campaigns.</p>
+            </header>
+            <div class="table-wrapper">
+                <table class="data-table" id="inventory-table">
+                    <thead>
+                        <tr>
+                            <th>Campaign</th>
+                            <th>Game</th>
+                            <th>Status</th>
+                            <th>Progress</th>
+                            <th>Claimed / Total</th>
+                            <th>Ends</th>
+                        </tr>
+                    </thead>
+                    <tbody id="inventory-body">
+                        <tr class="empty"><td colspan="6">No campaigns loaded yet.</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="grid two-columns">
+            <article class="card">
+                <header class="card-header">
+                    <h2>Settings</h2>
+                </header>
+                <div class="card-body">
+                    <form id="settings-form" class="form">
+                        <label>
+                            <span>Language</span>
+                            <input type="text" name="language" placeholder="en" />
+                        </label>
+                        <label class="inline">
+                            <input type="checkbox" name="dark_mode" />
+                            <span>Enable dark mode</span>
+                        </label>
+                        <label>
+                            <span>Excluded Channels (comma or newline separated)</span>
+                            <textarea name="exclude" rows="3"></textarea>
+                        </label>
+                        <label>
+                            <span>Priority Channels (comma or newline separated)</span>
+                            <textarea name="priority" rows="3"></textarea>
+                        </label>
+                        <label>
+                            <span>Connection Quality</span>
+                            <select name="connection_quality" id="connection-quality">
+                                <option value="">Auto</option>
+                                {% for quality in range(1, 7) %}
+                                <option value="{{ quality }}">{{ quality }}</option>
+                                {% endfor %}
+                            </select>
+                        </label>
+                        <label class="inline">
+                            <input type="checkbox" name="tray_notifications" />
+                            <span>Tray notifications</span>
+                        </label>
+                        <label>
+                            <span>Priority Mode</span>
+                            <select name="priority_mode" id="priority-mode">
+                                {% for mode in priority_modes %}
+                                <option value="{{ mode }}">{{ mode.replace('_', ' ').title() }}</option>
+                                {% endfor %}
+                            </select>
+                        </label>
+                        <button type="submit" class="btn">Save Settings</button>
+                    </form>
+                    <p class="muted" id="settings-feedback"></p>
+                </div>
+            </article>
+
+            <article class="card">
+                <header class="card-header">
+                    <h2>System Info</h2>
+                </header>
+                <div class="card-body">
+                    <div class="websocket-status">
+                        <h3>Websocket Connections</h3>
+                        <ul id="websocket-list">
+                            <li class="muted">No websocket data.</li>
+                        </ul>
+                    </div>
+                    <div class="notifications">
+                        <h3>Notifications</h3>
+                        <ul id="notifications-list">
+                            <li class="muted">No notifications yet.</li>
+                        </ul>
+                    </div>
+                </div>
+            </article>
+        </section>
+
+        <section class="card">
+            <header class="card-header">
+                <h2>Log Output</h2>
+            </header>
+            <div class="card-body">
+                <pre id="log-output">Waiting for data&hellip;</pre>
+            </div>
+        </section>
+    </main>
+
+    <div id="toast" class="toast hidden"></div>
+
+    <script src="/static/js/app.js" defer></script>
+</body>
+</html>
