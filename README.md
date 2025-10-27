@@ -25,6 +25,66 @@ Every several seconds, the application pretends to watch a particular stream by 
 - If you wish to keep the miner occupied with mining anything it can, beyond what you've selected via the Priority List, you can use the Priority Mode setting to specify the mining order for the rest of the games.
 - Make sure to link your Twitch account to game accounts on the [campaigns page](https://www.twitch.tv/drops/campaigns), to enable more games to be mined.
 
+### Command-line wrapper
+
+For server environments or anyone who prefers the terminal, the
+`cli_wrapper.py` script now provides a fully headless entry point. The wrapper
+uses lightweight console substitutes for the Tk-based interface so no display
+server is required. It now reports its progress directly in the terminal so you
+can see when the settings are loaded, the Twitch client starts, and when the
+miner shuts down. Launch the miner with:
+
+```bash
+python cli_wrapper.py --log
+```
+
+All familiar options from the GUI application are available (`-v` for verbose
+logging, `--log` to enable file logging, etc.), but any tray-related settings
+are ignored because there is no graphical shell. Use `--quiet` if you only want
+warnings and errors in the console. The command also honours `--version` to
+print the current release number and exit. Optional `--telegram-token` and
+`--telegram-chat-id` flags can be provided to forward mined drop notifications
+to a Telegram bot; add `--telegram-thread-id` for Telegram forum topics. When
+`--telegram-commands` (or the matching setting in the wrapper configuration
+file) is enabled, the bot also accepts commands like `/settings` and
+`/set log true` so you can review or update wrapper defaults remotely.
+
+The wrapper now also writes a `cli_wrapper_settings.json` file next to the
+standard `settings.json`. It is created automatically on the first launch and
+can be edited to set default values for common options (for example enabling
+`--log` or pre-configuring the Telegram token and chat ID). Any command-line
+flag you pass still takes precedence over what is stored in the file, so you
+can temporarily override the saved defaults when needed. You can also enable
+`telegram_commands` to let the Telegram bot list or change these defaults; send
+`/help` to the bot for the available commands. When you change Telegram values
+with `/set`, the wrapper reloads the credentials immediately so subsequent drop
+notifications and commands use the fresh token, chat, or forum thread without
+restarting the miner.
+
+Channel selection updates are now hidden from the console by default to keep
+the log focused on mining progress. Set `channel_logs` to `true` in
+`cli_wrapper_settings.json` or launch the wrapper with `--channel-logs` if you
+want to see the active channel list and switching events again. Use
+`--no-channel-logs` or set the option to `false` to silence these messages for
+quieter terminal sessions.
+
+If you have never configured a campaign priority list, the wrapper now
+automatically enables a catch-all mining mode. When no preferred campaigns are
+stored in `settings.json`, it switches the miner to process every available
+campaign, ensuring headless deployments keep working after fresh installs
+without manual setup. You can still curate the priority list or change the
+priority mode in the settings file or via the regular application if you prefer
+more control.
+
+When the upstream client stops on its own without a shutdown request (for
+example after a mined drop triggers an unexpected exit), the wrapper keeps the
+session alive by restarting the miner automatically after a short delay. It also
+retries automatically when Twitch returns a transient GraphQL service error so a
+momentary API outage no longer stops the miner for good. If a fatal condition
+such as a captcha requirement occurs, it still surfaces the error and exits so
+you can intervene, but normal mining continues unattended when Twitch finishes a
+campaign or cycles the active drop list.
+
 ### Pictures:
 
 ![Main](https://user-images.githubusercontent.com/4180725/164298155-c0880ad7-6423-4419-8d73-f3c053730a1b.png)
